@@ -2,9 +2,17 @@
 
 This project tests only:
 
-`Mobile camera → live foreground detection → moving bounding box`
+`Mobile camera → live foreground detection → moving bounding box → Capture → 5 cm reference measurement`
 
-It does **not** measure centimetres and does not use the previous Front/Side/Top workflow.
+It measures the captured view's Horizontal × Vertical size. It does not infer a third dimension and does not use the previous Front/Side/Top workflow.
+
+## Print the reference marker
+
+1. Open `reference/5cm_reference_marker.pdf`.
+2. Print using **Actual Size / 100%**. Never choose Fit, Shrink or Scale to Page.
+3. Measure the outer magenta square with a ruler. It must be exactly 5.00 cm × 5.00 cm.
+4. Cut along the outer cut line without cutting the magenta square.
+5. Keep the marker flat and place it beside the object in the same measurement plane.
 
 ## Test A — First verify it on the computer
 
@@ -18,6 +26,10 @@ It does **not** measure centimetres and does not use the previous Front/Side/Top
 8. Click **Calibrate Empty Background** and keep the camera still.
 9. Place one object in front of the background.
 10. Move the object and check whether the green bounding box follows it.
+11. Confirm the cyan `5 CM REFERENCE` frame appears around the marker.
+12. Hold the phone still until **Capture Object** becomes available.
+13. Capture and confirm the cropped preview and centimetre values.
+14. Use the phone Share sheet to choose Save Image / Save to Photos. Use Download only as a fallback.
 
 Do not double-click `index.html` directly. Camera access requires a web origin such as localhost or HTTPS.
 
@@ -66,6 +78,8 @@ For every test, record:
 - Does it jump to the background?
 - Does it continue following while the object moves?
 - Does **Set Empty Background** improve the result?
+- Does Capture become available after the frame stops moving?
+- Does the cropped preview include the complete object without excessive background?
 
 ## Detection settings
 
