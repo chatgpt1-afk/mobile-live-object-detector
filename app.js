@@ -6,8 +6,7 @@ const overlayCtx = overlay.getContext("2d");
 const workCanvas = document.querySelector("#processingCanvas");
 const workCtx = workCanvas.getContext("2d", { willReadFrequently: true });
 const startButton = document.querySelector("#startButton");
-const calibrateButton = document.querySelector("#calibrateButton");
-const resetButton = document.querySelector("#resetButton");
+const detectButton = document.querySelector("#detectButton");
 const captureButton = document.querySelector("#captureButton");
 const captureResult = document.querySelector("#captureResult");
 const closeResultButton = document.querySelector("#closeResultButton");
@@ -52,6 +51,7 @@ let capturedBlob = null;
 let capturedFilename = "object-capture.jpg";
 let lastMarker = null;
 let lastMeasurementBox = null;
+let detectionActive = false;
 
 thresholdInput.addEventListener("input", () => {
   thresholdValue.value = thresholdInput.value;
@@ -68,33 +68,19 @@ startButton.addEventListener("click", async () => {
   await startCamera();
 });
 
-calibrateButton.addEventListener("click", async () => {
-  if (!running || video.readyState < 2) return;
-  calibrateButton.disabled = true;
-  calibrateButton.textContent = "Calibrating… keep still";
-  detectionStatus.textContent = "Capturing empty background";
-  liveMessage.textContent = "Keep the scene empty and hold the phone still";
-  backgroundFrame = await captureAveragedBackground(8);
-  resetButton.disabled = false;
-  smoothedBox = null;
-  movedBackgroundFrames = 0;
-  detectionStatus.textContent = "Empty background saved";
-  liveMessage.textContent = "Now place one item without moving the phone";
-  calibrateButton.textContent = "Recalibrate Empty Background";
-  calibrateButton.disabled = false;
-});
-
-resetButton.addEventListener("click", () => {
-  backgroundFrame = null;
-  resetButton.disabled = true;
+detectButton.addEventListener("click", () => {
+  if (!running || !backgroundFrame) return;
+  detectionActive = true;
   smoothedBox = null;
   stableFrames = 0;
+  previousDetectionBox = null;
   lastValidBox = null;
   lastMarker = null;
   lastMeasurementBox = null;
   captureButton.disabled = true;
-  detectionStatus.textContent = "Calibration required";
-  liveMessage.textContent = "Remove the item, then calibrate the empty background";
+  detectButton.textContent = "Detecting…";
+  detectionStatus.textContent = "Looking for object and marker";
+  liveMessage.textContent = "Keep the phone still while the system frames the item";
 });
 
 captureButton.addEventListener("click", captureCurrentObject);
@@ -123,13 +109,17 @@ async function startCamera() {
     emptyState.hidden = true;
     cameraState.textContent = "Camera live";
     cameraState.className = "pill live";
-    startButton.textContent = "Stop Camera";
-    calibrateButton.disabled = false;
-    resetButton.disabled = true;
+    startButton.textContent = "Close Camera";
+    detectButton.disabled = true;
     captureButton.disabled = true;
-    detectionStatus.textContent = "Calibration required";
-    liveMessage.textContent = "Set the phone position, remove the item, then calibrate";
     resizeCanvases();
+    detectionStatus.textContent = "Automatic setup";
+    liveMessage.textContent = "Keep the scene empty and hold the phone still";
+    backgroundFrame = await captureAveragedBackground(8);
+    detectionActive = false;
+    detectButton.disabled = false;
+    detectionStatus.textContent = "Ready to detect";
+    liveMessage.textContent = "Place the item and marker, then tap Detect Object";
     requestAnimationFrame(processLoop);
   } catch (error) {
     const reason = error?.name === "NotAllowedError"
@@ -150,14 +140,14 @@ function stopCamera() {
   emptyState.hidden = false;
   cameraState.textContent = "Camera off";
   cameraState.className = "pill idle";
-  startButton.textContent = "Start Camera";
-  calibrateButton.disabled = true;
-  resetButton.disabled = true;
+  startButton.textContent = "Open Camera";
+  detectButton.disabled = true;
   captureButton.disabled = true;
   detectionStatus.textContent = "Waiting for camera";
   confidenceText.textContent = "—";
   fpsText.textContent = "—";
   markerStatus.textContent = "Not detected";
+  detectionActive = false;
 }
 
 function showCameraError(message) {
@@ -221,6 +211,13 @@ function processFrame() {
     return;
   }
 
+  if (!detectionActive) {
+    drawOverlay(null, null);
+    markerStatus.textContent = "Waiting";
+    captureButton.disabled = true;
+    return;
+  }
+
   if (backgroundHasMoved(frame.data, backgroundFrame, width, height, threshold)) {
     movedBackgroundFrames += 1;
   } else {
@@ -232,7 +229,9 @@ function processFrame() {
     detectionStatus.textContent = "Camera/background changed";
     confidenceText.textContent = "—";
     captureButton.disabled = true;
-    liveMessage.textContent = "Return to the original position or recalibrate the empty scene";
+    detectButton.textContent = "Detect Object";
+    detectionActive = false;
+    liveMessage.textContent = "Camera position changed. Close and reopen Camera to reset";
     return;
   }
 
@@ -280,6 +279,7 @@ function processFrame() {
     ? "Move back: part of the item may be outside the picture"
     : !marker ? "Place the printed 5 cm marker beside the object"
       : stableFrames < 5 ? "Hold steady — preparing Capture" : "Object and marker ready — Capture is available";
+  if (!captureButton.disabled) detectButton.textContent = "Detect New Object";
 }
 
 function boxIoU(a, b) {
@@ -296,7 +296,8 @@ function detectReferenceMarker(data, width, height) {
   const mask = new Uint8Array(width * height);
   for (let p = 0, i = 0; p < mask.length; p++, i += 4) {
     const r = data[i], g = data[i + 1], b = data[i + 2];
-    mask[p] = r > 105 && b > 75 && g < Math.min(r, b) * 0.76 && r + b > 210 ? 1 : 0;
+    const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+    mask[p] = gray < 105 ? 1 : 0;
   }
   const visited = new Uint8Array(mask.length);
   const queue = new Int32Array(mask.length);
@@ -323,11 +324,25 @@ function detectReferenceMarker(data, width, height) {
     const boxW = maxX - minX + 1, boxH = maxY - minY + 1;
     const aspect = boxW / Math.max(1, boxH);
     const fill = area / Math.max(1, boxW * boxH);
-    if (boxW < 9 || boxH < 9 || aspect < 0.82 || aspect > 1.22 || fill < 0.20 || fill > 0.78) continue;
+    if (boxW < 12 || boxH < 12 || aspect < 0.80 || aspect > 1.25 || fill < 0.24 || fill > 0.72) continue;
+    if (!matchesBlackWhiteMarkerPattern(data, width, height, { x:minX, y:minY, width:boxW, height:boxH })) continue;
     const score = area * (1 - Math.abs(1 - aspect));
     if (!best || score > best.score) best = { x:minX, y:minY, width:boxW, height:boxH, area, score };
   }
   return best;
+}
+
+function matchesBlackWhiteMarkerPattern(data, width, height, box) {
+  const isDark = (nx, ny) => {
+    const x = Math.max(0, Math.min(width - 1, Math.round(box.x + nx * (box.width - 1))));
+    const y = Math.max(0, Math.min(height - 1, Math.round(box.y + ny * (box.height - 1))));
+    const i = (y * width + x) * 4;
+    return 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2] < 125;
+  };
+  const outerDark = [[.5,.04],[.5,.96],[.04,.5],[.96,.5]].every(([x,y]) => isDark(x,y));
+  const threeDark = [[.30,.30],[.70,.30],[.30,.70],[.50,.50]].every(([x,y]) => isDark(x,y));
+  const openCorner = !isDark(.70,.70);
+  return outerDark && threeDark && openCorner;
 }
 
 function clearMaskRegion(mask, width, height, box, margin) {
@@ -629,5 +644,14 @@ document.addEventListener("visibilitychange", () => {
 });
 
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("service-worker.js").catch(() => {}));
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("service-worker.js?v=0.5.0")
+      .then(registration => registration.update())
+      .catch(() => {});
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (sessionStorage.getItem("live-object-frame-reloaded") === "0.5.0") return;
+      sessionStorage.setItem("live-object-frame-reloaded", "0.5.0");
+      window.location.reload();
+    });
+  });
 }

@@ -15,9 +15,11 @@ Free, dependency-free Mobile Web/PWA prototype for live camera object framing.
 - Stable-frame Capture button
 - High-resolution photo capture and automatic object crop
 - Immediate pixel-size, camera-resolution and frame-coverage analysis
-- Automatic printed 5 cm reference-marker detection
+- Automatic black-and-white printed 5 cm reference-marker detection
 - 2D Horizontal × Vertical centimetre measurement
 - Mobile Save to Photos / Share workflow with download fallback
+- Simplified Open Camera → Detect Object → Capture flow
+- Floating Camera capture icon inside the live-view area
 - Offline PWA cache after the first successful HTTPS visit
 
 ## Not included in Phase 1

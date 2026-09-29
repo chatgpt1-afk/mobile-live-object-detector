@@ -9,13 +9,13 @@
   <title>Live Object Frame</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=0.5.0">
 </head>
 <body>
   <main class="app-shell">
     <header class="topbar">
       <div>
-        <p class="eyebrow">PHASE 1</p>
+        <p class="eyebrow">PHASE 2B · VERSION 0.5.0</p>
         <h1>Live Object Frame</h1>
       </div>
       <span id="cameraState" class="pill idle">Camera off</span>
@@ -27,10 +27,13 @@
       <div id="emptyState" class="empty-state">
         <div class="camera-icon" aria-hidden="true"></div>
         <strong>Camera is not running</strong>
-        <span>Tap Start Camera to begin.</span>
+        <span>Tap Open Camera to begin.</span>
       </div>
       <div class="safe-guide" aria-hidden="true"></div>
       <div id="liveMessage" class="live-message">Place one item near the centre</div>
+      <button id="captureButton" class="capture-fab" type="button" aria-label="Capture object" title="Capture object" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 10.4 2h3.2L15 4h3.5A3.5 3.5 0 0 1 22 7.5v10a3.5 3.5 0 0 1-3.5 3.5h-13A3.5 3.5 0 0 1 2 17.5v-10A3.5 3.5 0 0 1 5.5 4H9Zm3 4a5 5 0 1 0 0 10 5 5 0 0 0 0-10Zm0 2.2a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6Z"/></svg>
+      </button>
     </section>
 
     <section class="status-card" aria-live="polite">
@@ -47,16 +50,14 @@
         <strong id="fps">—</strong>
       </div>
       <div>
-        <span class="label">5 cm Marker</span>
+        <span class="label">B&amp;W 5 cm Marker</span>
         <strong id="markerStatus">Not detected</strong>
       </div>
     </section>
 
     <section class="controls">
-      <button id="startButton" class="primary" type="button">Start Camera</button>
-      <button id="calibrateButton" type="button" disabled>Calibrate Empty Background</button>
-      <button id="resetButton" type="button" disabled>Clear Calibration</button>
-      <button id="captureButton" class="capture" type="button" disabled>Capture Object</button>
+      <button id="startButton" class="primary" type="button">Open Camera</button>
+      <button id="detectButton" type="button" disabled>Detect Object</button>
     </section>
 
     <section id="captureResult" class="capture-result" hidden>
@@ -98,20 +99,16 @@
     <section class="instructions">
       <h2>First test</h2>
       <ol>
-        <li>Print `reference/5cm_reference_marker.pdf` at 100% / Actual Size.</li>
-        <li>Use a plain background with even light.</li>
-        <li>Tap <b>Start Camera</b> and allow camera access.</li>
-        <li>Set the final phone position and distance, then remove the item.</li>
-        <li>Tap <b>Calibrate Empty Background</b> and keep the phone still.</li>
-        <li>Place the item and 5 cm marker in the same plane, with a clear gap between them.</li>
-        <li>Wait for the green object frame and cyan marker frame.</li>
-        <li>Tap Capture to analyse and crop the high-resolution photo.</li>
-        <li>Recalibrate only if the phone position, zoom, lighting or background changes.</li>
+        <li>Print the black-and-white 5 cm marker at 100% / Actual Size.</li>
+        <li>Point the phone at the empty background, then tap <b>Open Camera</b>.</li>
+        <li>After automatic setup, place the item and marker in the same plane.</li>
+        <li>Tap <b>Detect Object</b>.</li>
+        <li>When both frames are stable, tap the round Camera icon beside the live view.</li>
       </ol>
     </section>
   </main>
 
   <canvas id="processingCanvas" hidden></canvas>
-  <script src="app.js" defer></script>
+  <script src="app.js?v=0.5.0" defer></script>
 </body>
 </html>
