@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101820">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Live Object Frame</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">PHASE 1</p>
+        <h1>Live Object Frame</h1>
+      </div>
+      <span id="cameraState" class="pill idle">Camera off</span>
+    </header>
+
+    <section class="viewer" id="viewer" aria-label="Live camera preview">
+      <video id="camera" autoplay muted playsinline></video>
+      <canvas id="overlay"></canvas>
+      <div id="emptyState" class="empty-state">
+        <div class="camera-icon" aria-hidden="true"></div>
+        <strong>Camera is not running</strong>
+        <span>Tap Start Camera to begin.</span>
+      </div>
+      <div class="safe-guide" aria-hidden="true"></div>
+      <div id="liveMessage" class="live-message">Place one item near the centre</div>
+    </section>
+
+    <section class="status-card" aria-live="polite">
+      <div>
+        <span class="label">Detection</span>
+        <strong id="detectionStatus">Waiting for camera</strong>
+      </div>
+      <div>
+        <span class="label">Confidence</span>
+        <strong id="confidence">—</strong>
+      </div>
+      <div>
+        <span class="label">Processing</span>
+        <strong id="fps">—</strong>
+      </div>
+    </section>
+
+    <section class="controls">
+      <button id="startButton" class="primary" type="button">Start Camera</button>
+      <button id="calibrateButton" type="button" disabled>Set Empty Background</button>
+      <button id="resetButton" type="button" disabled>Use Auto Background</button>
+    </section>
+
+    <details class="settings">
+      <summary>Detection settings</summary>
+      <label>
+        <span>Foreground sensitivity</span>
+        <output id="thresholdValue">42</output>
+        <input id="threshold" type="range" min="20" max="90" value="42" step="1">
+      </label>
+      <label>
+        <span>Minimum object size</span>
+        <output id="areaValue">2.0%</output>
+        <input id="minArea" type="range" min="5" max="120" value="20" step="1">
+      </label>
+    </details>
+
+    <section class="instructions">
+      <h2>First test</h2>
+      <ol>
+        <li>Use a plain background with even light.</li>
+        <li>Tap <b>Start Camera</b> and allow camera access.</li>
+        <li>Move one item into the centre of the picture.</li>
+        <li>Confirm that the green frame follows the item.</li>
+        <li>If the background is difficult, remove the item, tap <b>Set Empty Background</b>, then place it back without moving the phone.</li>
+      </ol>
+    </section>
+  </main>
+
+  <canvas id="processingCanvas" hidden></canvas>
+  <script src="app.js" defer></script>
+</body>
+</html>
