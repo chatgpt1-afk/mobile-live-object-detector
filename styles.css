@@ -182,6 +182,11 @@ button.compact { flex: 0 0 auto; min-height: 38px; padding: 7px 12px; }
 .settings output { color: var(--accent); font-weight: 800; }
 .instructions h2 { margin: 0 0 8px; font-size: 1rem; }
 .instructions ol { margin: 0; padding-left: 20px; color: #c1ccd4; font-size: .83rem; line-height: 1.55; }
+.frame-editor-stage { margin-top: 12px; }
+#frameEditor { display: block; width: 100%; height: auto; border-radius: 12px; background: #05080a; touch-action: none; }
+.editor-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.editor-toolbar button { flex: 1 1 130px; }
+.editor-toolbar button.active { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 @media (orientation: landscape) and (max-height: 600px) {
   .app-shell { width: min(100%, 1050px); }

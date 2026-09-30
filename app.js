@@ -21,7 +21,16 @@ const referenceScale = document.querySelector("#referenceScale");
 const analysisStatus = document.querySelector("#analysisStatus");
 const analysisReason = document.querySelector("#analysisReason");
 const downloadCapture = document.querySelector("#downloadCapture");
-const saveToPhotos = document.querySelector("#saveToPhotos");
+const frameEditorStage = document.querySelector("#frameEditorStage");
+const frameEditor = document.querySelector("#frameEditor");
+const frameEditorCtx = frameEditor.getContext("2d");
+const editorHint = document.querySelector("#editorHint");
+const useSystemFrameButton = document.querySelector("#useSystemFrame");
+const manualFrameButton = document.querySelector("#manualFrame");
+const undoFrameButton = document.querySelector("#undoFrame");
+const redoFrameButton = document.querySelector("#redoFrame");
+const resetFrameButton = document.querySelector("#resetFrame");
+const confirmFrameButton = document.querySelector("#confirmFrame");
 const thresholdInput = document.querySelector("#threshold");
 const minAreaInput = document.querySelector("#minArea");
 const thresholdValue = document.querySelector("#thresholdValue");
@@ -56,6 +65,14 @@ let lastMeasurementBox = null;
 let detectionActive = false;
 let liveMarker = null;
 let markerMissingFrames = 0;
+let capturedFullCanvas = null;
+let capturedMarker = null;
+let systemFrame = null;
+let editableFrame = null;
+let frameHistory = [];
+let frameHistoryIndex = -1;
+let manualFrameEnabled = false;
+let frameGesture = null;
 
 thresholdInput.addEventListener("input", () => {
   thresholdValue.value = thresholdInput.value;
@@ -117,7 +134,16 @@ detectButton.addEventListener("click", () => {
 
 captureButton.addEventListener("click", captureCurrentObject);
 closeResultButton.addEventListener("click", () => { captureResult.hidden = true; });
-saveToPhotos.addEventListener("click", () => shareCapturedPhoto(false));
+useSystemFrameButton.addEventListener("click", useDetectedFrame);
+manualFrameButton.addEventListener("click", enableManualFrame);
+undoFrameButton.addEventListener("click", undoFrameEdit);
+redoFrameButton.addEventListener("click", redoFrameEdit);
+resetFrameButton.addEventListener("click", resetFrameEdit);
+confirmFrameButton.addEventListener("click", confirmFrameAndMeasure);
+frameEditor.addEventListener("pointerdown", beginFrameEdit);
+frameEditor.addEventListener("pointermove", moveFrameEdit);
+frameEditor.addEventListener("pointerup", endFrameEdit);
+frameEditor.addEventListener("pointercancel", endFrameEdit);
 
 async function startCamera() {
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -392,8 +418,7 @@ async function captureCurrentObject() {
   fullCtx.drawImage(video, 0, 0, full.width, full.height);
 
   const fullFrame = fullCtx.getImageData(0, 0, full.width, full.height);
-  let capturedMarker = detectReferenceMarker(fullFrame.data, full.width, full.height);
-  let markerSource = capturedMarker ? "captured photo" : "";
+  capturedMarker = detectReferenceMarker(fullFrame.data, full.width, full.height);
   if (!capturedMarker && liveMarker) {
     const liveScaleX = full.width / workCanvas.width;
     const liveScaleY = full.height / workCanvas.height;
@@ -403,7 +428,6 @@ async function captureCurrentObject() {
       width: liveMarker.width * liveScaleX,
       height: liveMarker.height * liveScaleY
     };
-    markerSource = "stable live detection";
   }
   const analysisCanvas = document.createElement("canvas");
   analysisCanvas.width = workCanvas.width;
@@ -439,71 +463,263 @@ async function captureCurrentObject() {
 
   const sx = full.width / analysisCanvas.width;
   const sy = full.height / analysisCanvas.height;
-  const itemForCrop = capturedItem
-    ? expandBox(capturedItem, analysisCanvas.width, analysisCanvas.height, 0.035)
-    : lastValidBox || { x: 0, y: 0, width: analysisCanvas.width, height: analysisCanvas.height };
-  const x = Math.max(0, Math.floor(itemForCrop.x * sx));
-  const y = Math.max(0, Math.floor(itemForCrop.y * sy));
-  const w = Math.min(full.width - x, Math.ceil(itemForCrop.width * sx));
-  const h = Math.min(full.height - y, Math.ceil(itemForCrop.height * sy));
-  const crop = document.createElement("canvas");
-  crop.width = Math.max(1, w);
-  crop.height = Math.max(1, h);
-  crop.getContext("2d").drawImage(full, x, y, w, h, 0, 0, w, h);
+  const detectedFrame = capturedItem
+    ? expandBox(capturedItem, analysisCanvas.width, analysisCanvas.height, 0.02)
+    : lastValidBox || {
+      x: analysisCanvas.width * 0.2, y: analysisCanvas.height * 0.2,
+      width: analysisCanvas.width * 0.6, height: analysisCanvas.height * 0.6
+    };
+  systemFrame = normaliseFrame({
+    x: detectedFrame.x * sx, y: detectedFrame.y * sy,
+    width: detectedFrame.width * sx, height: detectedFrame.height * sy
+  }, full.width, full.height);
+  editableFrame = { ...systemFrame };
+  capturedFullCanvas = full;
+  frameEditor.width = full.width;
+  frameEditor.height = full.height;
+  frameHistory = [{ ...editableFrame }];
+  frameHistoryIndex = 0;
+  manualFrameEnabled = false;
+  frameEditorStage.hidden = false;
+  capturedPreview.hidden = true;
+  downloadCapture.hidden = true;
+  useSystemFrameButton.classList.add("active");
+  manualFrameButton.classList.remove("active");
+  updateFrameHistoryButtons();
+  renderFrameEditor();
 
-  const previewBlob = await canvasToBlob(crop, 0.92);
-  const fullBlob = await canvasToBlob(full, 0.94);
-  if (captureUrl) URL.revokeObjectURL(captureUrl);
-  captureUrl = URL.createObjectURL(fullBlob);
-  capturedPreview.src = URL.createObjectURL(previewBlob);
-  pixelSize.textContent = `${w} × ${h} px`;
+  pixelSize.textContent = `${Math.round(editableFrame.width)} × ${Math.round(editableFrame.height)} px`;
   imageSize.textContent = `${full.width} × ${full.height}`;
-  frameCoverage.textContent = `${((w * h) / (full.width * full.height) * 100).toFixed(1)}%`;
-  markerStatus.textContent = capturedMarker ? `Detected from ${markerSource}` : "Not detected";
-  if (!capturedMarker || !capturedItem || capturedItem.touchesEdge) {
-    analysisStatus.textContent = "REVIEW REQUIRED";
-    analysisReason.textContent = !capturedMarker
-      ? "5 cm reference marker not found in captured photo"
-      : !capturedItem ? "Item not found in captured photo" : "Detected item touches the image edge";
-    horizontalSize.textContent = "—";
-    verticalSize.textContent = "—";
-    referenceScale.textContent = capturedMarker
-      ? `${(((capturedMarker.width + capturedMarker.height) / 2) / 5).toFixed(2)} px/cm`
-      : "—";
-  } else {
-    const markerPixels = (capturedMarker.width + capturedMarker.height) / 2;
-    const pixelsPerCm = markerPixels / 5;
-    analysisStatus.textContent = "MEASURED";
-    analysisReason.textContent = "Marker and item identified from captured photo";
-    horizontalSize.textContent = `${(capturedItem.width * sx / pixelsPerCm).toFixed(2)} cm`;
-    verticalSize.textContent = `${(capturedItem.height * sy / pixelsPerCm).toFixed(2)} cm`;
-    referenceScale.textContent = `${pixelsPerCm.toFixed(2)} px/cm`;
-  }
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  capturedBlob = fullBlob;
-  capturedFilename = `object-capture-${stamp}.jpg`;
-  downloadCapture.href = captureUrl;
-  downloadCapture.download = capturedFilename;
+  frameCoverage.textContent = `${((editableFrame.width * editableFrame.height) / (full.width * full.height) * 100).toFixed(1)}%`;
+  markerStatus.textContent = capturedMarker ? "Detected" : "Not detected";
+  analysisStatus.textContent = "FRAME REVIEW";
+  analysisReason.textContent = capturedItem ? "Review the suggested frame" : "System frame unavailable — adjust the manual frame";
+  horizontalSize.textContent = "Pending frame confirmation";
+  verticalSize.textContent = "Pending frame confirmation";
+  referenceScale.textContent = capturedMarker
+    ? `${(((capturedMarker.width + capturedMarker.height) / 2) / 5).toFixed(2)} px/cm`
+    : "—";
   captureResult.hidden = false;
   captureResult.scrollIntoView({ behavior: "smooth", block: "start" });
   captureButton.setAttribute("aria-label", "Capture object");
   captureButton.title = "Capture object";
   captureButton.disabled = false;
-  if (navigator.userActivation?.isActive && navigator.canShare) await shareCapturedPhoto(true);
 }
 
-async function shareCapturedPhoto(automatic) {
-  if (!capturedBlob) return;
-  const file = new File([capturedBlob], capturedFilename, { type: "image/jpeg" });
-  if (navigator.canShare?.({ files: [file] }) && navigator.share) {
-    try {
-      await navigator.share({ files: [file], title: "Object measurement photo" });
-      return;
-    } catch (error) {
-      if (error?.name === "AbortError") return;
+function normaliseFrame(frame, width, height) {
+  const minimum = Math.max(24, Math.min(width, height) * 0.04);
+  const x = Math.max(0, Math.min(width - minimum, frame.x));
+  const y = Math.max(0, Math.min(height - minimum, frame.y));
+  return {
+    x,
+    y,
+    width: Math.max(minimum, Math.min(width - x, frame.width)),
+    height: Math.max(minimum, Math.min(height - y, frame.height))
+  };
+}
+
+function useDetectedFrame() {
+  if (!systemFrame) return;
+  editableFrame = { ...systemFrame };
+  manualFrameEnabled = false;
+  useSystemFrameButton.classList.add("active");
+  manualFrameButton.classList.remove("active");
+  editorHint.textContent = "System frame selected. Confirm it, or choose Manual Frame to adjust.";
+  pushFrameHistory();
+  renderFrameEditor();
+}
+
+function enableManualFrame() {
+  if (!editableFrame) return;
+  manualFrameEnabled = true;
+  manualFrameButton.classList.add("active");
+  useSystemFrameButton.classList.remove("active");
+  editorHint.textContent = "Drag inside the frame to move it. Drag any square handle to resize.";
+  renderFrameEditor();
+}
+
+function resetFrameEdit() {
+  if (!systemFrame) return;
+  editableFrame = { ...systemFrame };
+  manualFrameEnabled = true;
+  manualFrameButton.classList.add("active");
+  useSystemFrameButton.classList.remove("active");
+  pushFrameHistory();
+  renderFrameEditor();
+}
+
+function pushFrameHistory() {
+  if (!editableFrame) return;
+  const current = frameHistory[frameHistoryIndex];
+  if (current && ["x", "y", "width", "height"].every(key => Math.abs(current[key] - editableFrame[key]) < 0.5)) return;
+  frameHistory = frameHistory.slice(0, frameHistoryIndex + 1);
+  frameHistory.push({ ...editableFrame });
+  frameHistoryIndex = frameHistory.length - 1;
+  updateFrameHistoryButtons();
+}
+
+function undoFrameEdit() {
+  if (frameHistoryIndex <= 0) return;
+  frameHistoryIndex--;
+  editableFrame = { ...frameHistory[frameHistoryIndex] };
+  updateFrameHistoryButtons();
+  renderFrameEditor();
+}
+
+function redoFrameEdit() {
+  if (frameHistoryIndex >= frameHistory.length - 1) return;
+  frameHistoryIndex++;
+  editableFrame = { ...frameHistory[frameHistoryIndex] };
+  updateFrameHistoryButtons();
+  renderFrameEditor();
+}
+
+function updateFrameHistoryButtons() {
+  undoFrameButton.disabled = frameHistoryIndex <= 0;
+  redoFrameButton.disabled = frameHistoryIndex < 0 || frameHistoryIndex >= frameHistory.length - 1;
+}
+
+function editorPoint(event) {
+  const rect = frameEditor.getBoundingClientRect();
+  return {
+    x: (event.clientX - rect.left) * frameEditor.width / rect.width,
+    y: (event.clientY - rect.top) * frameEditor.height / rect.height
+  };
+}
+
+function frameHandles(frame) {
+  const x1 = frame.x, x2 = frame.x + frame.width / 2, x3 = frame.x + frame.width;
+  const y1 = frame.y, y2 = frame.y + frame.height / 2, y3 = frame.y + frame.height;
+  return [
+    { name: "nw", x: x1, y: y1 }, { name: "n", x: x2, y: y1 }, { name: "ne", x: x3, y: y1 },
+    { name: "e", x: x3, y: y2 }, { name: "se", x: x3, y: y3 }, { name: "s", x: x2, y: y3 },
+    { name: "sw", x: x1, y: y3 }, { name: "w", x: x1, y: y2 }
+  ];
+}
+
+function beginFrameEdit(event) {
+  if (!manualFrameEnabled || !editableFrame) return;
+  const point = editorPoint(event);
+  const rect = frameEditor.getBoundingClientRect();
+  const tolerance = 22 * frameEditor.width / rect.width;
+  const handle = frameHandles(editableFrame).find(item => Math.hypot(point.x - item.x, point.y - item.y) <= tolerance);
+  const inside = point.x >= editableFrame.x && point.x <= editableFrame.x + editableFrame.width &&
+    point.y >= editableFrame.y && point.y <= editableFrame.y + editableFrame.height;
+  if (!handle && !inside) return;
+  frameEditor.setPointerCapture(event.pointerId);
+  frameGesture = { type: handle?.name || "move", start: point, frame: { ...editableFrame } };
+}
+
+function moveFrameEdit(event) {
+  if (!frameGesture || !editableFrame) return;
+  const point = editorPoint(event);
+  const dx = point.x - frameGesture.start.x;
+  const dy = point.y - frameGesture.start.y;
+  const start = frameGesture.frame;
+  let left = start.x, top = start.y, right = start.x + start.width, bottom = start.y + start.height;
+  if (frameGesture.type === "move") {
+    left += dx; right += dx; top += dy; bottom += dy;
+  } else {
+    if (frameGesture.type.includes("w")) left += dx;
+    if (frameGesture.type.includes("e")) right += dx;
+    if (frameGesture.type.includes("n")) top += dy;
+    if (frameGesture.type.includes("s")) bottom += dy;
+  }
+  const minimum = Math.max(24, Math.min(frameEditor.width, frameEditor.height) * 0.04);
+  if (right - left < minimum) frameGesture.type.includes("w") ? left = right - minimum : right = left + minimum;
+  if (bottom - top < minimum) frameGesture.type.includes("n") ? top = bottom - minimum : bottom = top + minimum;
+  if (frameGesture.type === "move") {
+    const width = right - left, height = bottom - top;
+    left = Math.max(0, Math.min(frameEditor.width - width, left));
+    top = Math.max(0, Math.min(frameEditor.height - height, top));
+    right = left + width; bottom = top + height;
+  }
+  left = Math.max(0, left); top = Math.max(0, top);
+  right = Math.min(frameEditor.width, right); bottom = Math.min(frameEditor.height, bottom);
+  editableFrame = { x: left, y: top, width: right - left, height: bottom - top };
+  renderFrameEditor();
+}
+
+function endFrameEdit(event) {
+  if (!frameGesture) return;
+  if (frameEditor.hasPointerCapture(event.pointerId)) frameEditor.releasePointerCapture(event.pointerId);
+  frameGesture = null;
+  pushFrameHistory();
+}
+
+function renderFrameEditor() {
+  if (!capturedFullCanvas || !editableFrame) return;
+  frameEditorCtx.clearRect(0, 0, frameEditor.width, frameEditor.height);
+  frameEditorCtx.drawImage(capturedFullCanvas, 0, 0);
+  const lineWidth = Math.max(4, frameEditor.width / 300);
+  frameEditorCtx.strokeStyle = "#54e38e";
+  frameEditorCtx.lineWidth = lineWidth;
+  frameEditorCtx.strokeRect(editableFrame.x, editableFrame.y, editableFrame.width, editableFrame.height);
+  if (manualFrameEnabled) {
+    const size = Math.max(24, frameEditor.width / 28);
+    frameEditorCtx.fillStyle = "#ffffff";
+    frameEditorCtx.strokeStyle = "#0a7d43";
+    frameEditorCtx.lineWidth = Math.max(2, lineWidth / 2);
+    for (const handle of frameHandles(editableFrame)) {
+      frameEditorCtx.fillRect(handle.x - size / 2, handle.y - size / 2, size, size);
+      frameEditorCtx.strokeRect(handle.x - size / 2, handle.y - size / 2, size, size);
     }
   }
-  if (!automatic) downloadCapture.click();
+  pixelSize.textContent = `${Math.round(editableFrame.width)} × ${Math.round(editableFrame.height)} px`;
+  frameCoverage.textContent = `${((editableFrame.width * editableFrame.height) / (frameEditor.width * frameEditor.height) * 100).toFixed(1)}%`;
+}
+
+async function confirmFrameAndMeasure() {
+  if (!capturedFullCanvas || !editableFrame) return;
+  if (!capturedMarker) {
+    analysisStatus.textContent = "REVIEW REQUIRED";
+    analysisReason.textContent = "5 cm reference marker was not detected; measurement was not guessed";
+    return;
+  }
+  const pixelsPerCm = ((capturedMarker.width + capturedMarker.height) / 2) / 5;
+  const horizontalCm = editableFrame.width / pixelsPerCm;
+  const verticalCm = editableFrame.height / pixelsPerCm;
+  const output = document.createElement("canvas");
+  output.width = capturedFullCanvas.width;
+  output.height = capturedFullCanvas.height;
+  const ctx = output.getContext("2d");
+  ctx.drawImage(capturedFullCanvas, 0, 0);
+  const lineWidth = Math.max(6, output.width / 220);
+  ctx.strokeStyle = "#36e37e";
+  ctx.lineWidth = lineWidth;
+  ctx.strokeRect(editableFrame.x, editableFrame.y, editableFrame.width, editableFrame.height);
+  const fontSize = Math.max(30, output.width / 32);
+  ctx.font = `700 ${fontSize}px system-ui, sans-serif`;
+  const lines = [`Horizontal: ${horizontalCm.toFixed(2)} cm`, `Vertical: ${verticalCm.toFixed(2)} cm`];
+  const padding = fontSize * 0.45;
+  const textWidth = Math.max(...lines.map(line => ctx.measureText(line).width));
+  const labelHeight = fontSize * 2.55;
+  const labelX = Math.max(0, Math.min(output.width - textWidth - padding * 2, editableFrame.x));
+  const preferredY = editableFrame.y - labelHeight - lineWidth;
+  const labelY = preferredY >= 0 ? preferredY : Math.min(output.height - labelHeight, editableFrame.y + editableFrame.height + lineWidth);
+  ctx.fillStyle = "rgba(0, 0, 0, .78)";
+  ctx.fillRect(labelX, labelY, textWidth + padding * 2, labelHeight);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(lines[0], labelX + padding, labelY + fontSize * 1.05);
+  ctx.fillText(lines[1], labelX + padding, labelY + fontSize * 2.15);
+
+  capturedBlob = await canvasToBlob(output, 0.94);
+  if (captureUrl) URL.revokeObjectURL(captureUrl);
+  captureUrl = URL.createObjectURL(capturedBlob);
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  capturedFilename = `measured-H-${horizontalCm.toFixed(2)}cm_V-${verticalCm.toFixed(2)}cm-${stamp}.jpg`;
+  capturedPreview.src = captureUrl;
+  capturedPreview.hidden = false;
+  frameEditorStage.hidden = true;
+  horizontalSize.textContent = `${horizontalCm.toFixed(2)} cm`;
+  verticalSize.textContent = `${verticalCm.toFixed(2)} cm`;
+  referenceScale.textContent = `${pixelsPerCm.toFixed(2)} px/cm`;
+  analysisStatus.textContent = "MEASURED";
+  analysisReason.textContent = manualFrameEnabled ? "Manual frame confirmed" : "System frame confirmed";
+  downloadCapture.href = captureUrl;
+  downloadCapture.download = capturedFilename;
+  downloadCapture.hidden = false;
+  downloadCapture.click();
 }
 
 function canvasToBlob(canvas, quality) {
@@ -761,12 +977,12 @@ document.addEventListener("visibilitychange", () => {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=0.7.0")
+    navigator.serviceWorker.register("service-worker.js?v=0.8.0")
       .then(registration => registration.update())
       .catch(() => {});
     navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (sessionStorage.getItem("live-object-frame-reloaded") === "0.7.0") return;
-      sessionStorage.setItem("live-object-frame-reloaded", "0.7.0");
+      if (sessionStorage.getItem("live-object-frame-reloaded") === "0.8.0") return;
+      sessionStorage.setItem("live-object-frame-reloaded", "0.8.0");
       window.location.reload();
     });
   });

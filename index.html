@@ -9,13 +9,13 @@
   <title>Live Object Frame</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=0.7.0">
+  <link rel="stylesheet" href="styles.css?v=0.8.0">
 </head>
 <body>
   <main class="app-shell">
     <header class="topbar">
       <div>
-        <p class="eyebrow">PHASE 2B · VERSION 0.7.0</p>
+        <p class="eyebrow">PHASE 2B · VERSION 0.8.0</p>
         <h1>Live Object Frame</h1>
       </div>
       <span id="cameraState" class="pill idle">Camera off</span>
@@ -69,7 +69,19 @@
         </div>
         <button id="closeResultButton" class="compact" type="button">Close</button>
       </div>
-      <img id="capturedPreview" alt="Automatically cropped captured object">
+      <div id="frameEditorStage" class="frame-editor-stage">
+        <canvas id="frameEditor" aria-label="Captured photo frame editor"></canvas>
+        <p id="editorHint" class="measurement-note">Review the suggested frame. Choose Manual Frame to move or resize it.</p>
+        <div class="editor-toolbar">
+          <button id="useSystemFrame" class="primary" type="button">Use System Frame</button>
+          <button id="manualFrame" type="button">Manual Frame</button>
+          <button id="undoFrame" class="compact" type="button" disabled>Undo</button>
+          <button id="redoFrame" class="compact" type="button" disabled>Redo</button>
+          <button id="resetFrame" class="compact" type="button">Reset</button>
+        </div>
+        <button id="confirmFrame" class="save-button" type="button">Confirm Frame &amp; Measure</button>
+      </div>
+      <img id="capturedPreview" alt="Measured object with frame and dimensions" hidden>
       <div class="capture-metrics">
         <div><span>Analysis status</span><strong id="analysisStatus">—</strong></div>
         <div><span>Reason</span><strong id="analysisReason">—</strong></div>
@@ -80,9 +92,8 @@
         <div><span>Camera image</span><strong id="imageSize">—</strong></div>
         <div><span>Frame coverage</span><strong id="frameCoverage">—</strong></div>
       </div>
-      <p class="measurement-note">This is a 2D Horizontal × Vertical measurement. Keep the marker and measured object surface in the same plane. No third dimension is inferred.</p>
-      <button id="saveToPhotos" class="save-button" type="button">Save to Photos</button>
-      <a id="downloadCapture" class="download-button fallback-download" download>Download instead</a>
+      <p class="measurement-note">This is a 2D Horizontal × Vertical measurement. After frame confirmation, the annotated image downloads automatically and its filename also contains H and V values. No third dimension is inferred.</p>
+      <a id="downloadCapture" class="download-button fallback-download" download hidden>Download final image again</a>
     </section>
 
     <details class="settings">
@@ -115,6 +126,6 @@
   </main>
 
   <canvas id="processingCanvas" hidden></canvas>
-  <script src="app.js?v=0.7.0" defer></script>
+  <script src="app.js?v=0.8.0" defer></script>
 </body>
 </html>

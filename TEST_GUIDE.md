@@ -29,8 +29,10 @@ It measures the captured view's Horizontal × Vertical size. It does not infer a
 9. Click **Detect Object**.
 10. Confirm the green frame contains the item and the cyan frame contains the 5 cm marker.
 11. Tap the round Camera icon beside the live view.
-12. Confirm the cropped preview and centimetre values.
-13. Use the phone Share sheet to choose Save Image / Save to Photos. Use Download only as a fallback.
+12. Review the suggested frame. Choose **Use System Frame** or **Manual Frame**.
+13. In Manual Frame, drag inside the frame to move it and drag any handle to resize it. Test Undo, Redo and Reset.
+14. Tap **Confirm Frame & Measure**.
+15. Confirm the final image contains the frame, Horizontal cm and Vertical cm. The image downloads automatically.
 
 Do not double-click `index.html` directly. Camera access requires a web origin such as localhost or HTTPS.
 
