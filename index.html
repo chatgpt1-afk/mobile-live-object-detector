@@ -9,13 +9,13 @@
   <title>Live Object Frame</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=0.6.1">
+  <link rel="stylesheet" href="styles.css?v=0.7.0">
 </head>
 <body>
   <main class="app-shell">
     <header class="topbar">
       <div>
-        <p class="eyebrow">PHASE 2B · VERSION 0.6.1</p>
+        <p class="eyebrow">PHASE 2B · VERSION 0.7.0</p>
         <h1>Live Object Frame</h1>
       </div>
       <span id="cameraState" class="pill idle">Camera off</span>
@@ -57,6 +57,7 @@
 
     <section class="controls">
       <button id="startButton" class="primary" type="button">Open Camera</button>
+      <button id="calibrateButton" type="button" disabled>Set Empty Background</button>
       <button id="detectButton" type="button" disabled>Detect Object</button>
     </section>
 
@@ -102,9 +103,9 @@
       <h2>First test</h2>
       <ol>
         <li>Print the black-and-white 5 cm marker at 100% / Actual Size.</li>
-        <li>Point the phone at the empty background, then tap <b>Open Camera</b>.</li>
-        <li>After automatic setup, place the item and marker in the same plane.</li>
-        <li>Tap <b>Detect Object</b>.</li>
+        <li>Tap <b>Open Camera</b>, point at the empty background and choose the final phone position.</li>
+        <li>While the scene is empty, tap <b>Set Empty Background</b> and keep the phone still.</li>
+        <li>Place the item and one marker in the same plane, then tap <b>Detect Object</b>.</li>
         <li>Make sure the green frame contains the complete item. Keep the marker visible elsewhere inside the camera view.</li>
         <li>If the live item frame does not appear, Capture is still available and the photo will be analysed after shooting.</li>
         <li>Tap the round Camera icon.</li>
@@ -114,6 +115,6 @@
   </main>
 
   <canvas id="processingCanvas" hidden></canvas>
-  <script src="app.js?v=0.6.1" defer></script>
+  <script src="app.js?v=0.7.0" defer></script>
 </body>
 </html>

@@ -8,9 +8,9 @@ Free, dependency-free Mobile Web/PWA prototype for live camera object framing.
 - Live foreground detection
 - Smoothed bounding box that follows the detected object
 - Edge warning when an object may be cut off
-- Required averaged empty-background calibration for stable detection
+- Manual averaged empty-background calibration using Set Empty Background
 - Automatic compensation for normal small hand-held camera shifts
-- Live framing of the main item without merging shadows or marker regions
+- Separate live item frame and stable 5 cm marker frame
 - Shadow suppression and small-item detection down to 0.1% of the frame
 - Adjustable sensitivity and minimum object size
 - Stable-frame Capture button

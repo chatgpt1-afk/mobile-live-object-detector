@@ -6,6 +6,7 @@ const overlayCtx = overlay.getContext("2d");
 const workCanvas = document.querySelector("#processingCanvas");
 const workCtx = workCanvas.getContext("2d", { willReadFrequently: true });
 const startButton = document.querySelector("#startButton");
+const calibrateButton = document.querySelector("#calibrateButton");
 const detectButton = document.querySelector("#detectButton");
 const captureButton = document.querySelector("#captureButton");
 const captureResult = document.querySelector("#captureResult");
@@ -53,6 +54,8 @@ let capturedFilename = "object-capture.jpg";
 let lastMarker = null;
 let lastMeasurementBox = null;
 let detectionActive = false;
+let liveMarker = null;
+let markerMissingFrames = 0;
 
 thresholdInput.addEventListener("input", () => {
   thresholdValue.value = thresholdInput.value;
@@ -69,6 +72,32 @@ startButton.addEventListener("click", async () => {
   await startCamera();
 });
 
+calibrateButton.addEventListener("click", async () => {
+  if (!running || video.readyState < 2) return;
+  calibrateButton.disabled = true;
+  detectButton.disabled = true;
+  captureButton.disabled = true;
+  detectionActive = false;
+  calibrateButton.textContent = "Saving Background…";
+  detectionStatus.textContent = "Capturing empty background";
+  liveMessage.textContent = "Keep the scene empty and hold the phone still";
+  backgroundFrame = await captureAveragedBackground(10);
+  smoothedBox = null;
+  stableFrames = 0;
+  previousDetectionBox = null;
+  lastValidBox = null;
+  lastMeasurementBox = null;
+  liveMarker = null;
+  markerMissingFrames = 0;
+  overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+  detectionStatus.textContent = "Empty background saved";
+  liveMessage.textContent = "Place the item and marker, then tap Detect Object";
+  markerStatus.textContent = "Waiting for Detect Object";
+  calibrateButton.textContent = "Set Empty Background Again";
+  calibrateButton.disabled = false;
+  detectButton.disabled = false;
+});
+
 detectButton.addEventListener("click", () => {
   if (!running || !backgroundFrame) return;
   detectionActive = true;
@@ -78,10 +107,12 @@ detectButton.addEventListener("click", () => {
   lastValidBox = null;
   lastMarker = null;
   lastMeasurementBox = null;
+  liveMarker = null;
+  markerMissingFrames = 0;
   captureButton.disabled = false;
   detectButton.textContent = "Detecting…";
-  detectionStatus.textContent = "Looking for item";
-  liveMessage.textContent = "Keep the item near the centre and keep the marker visible elsewhere in the camera view";
+  detectionStatus.textContent = "Looking for item and marker";
+  liveMessage.textContent = "Green frame = item; cyan frame = 5 cm marker";
 });
 
 captureButton.addEventListener("click", captureCurrentObject);
@@ -111,16 +142,14 @@ async function startCamera() {
     cameraState.textContent = "Camera live";
     cameraState.className = "pill live";
     startButton.textContent = "Close Camera";
+    calibrateButton.disabled = false;
     detectButton.disabled = true;
-    captureButton.disabled = false;
+    captureButton.disabled = true;
     resizeCanvases();
-    detectionStatus.textContent = "Automatic setup";
-    liveMessage.textContent = "Keep the scene empty and hold the phone still";
-    backgroundFrame = await captureAveragedBackground(8);
     detectionActive = false;
-    detectButton.disabled = false;
-    detectionStatus.textContent = "Ready to detect";
-    liveMessage.textContent = "Place the item and marker, then tap Detect Object";
+    detectionStatus.textContent = "Empty background required";
+    markerStatus.textContent = "Waiting for background";
+    liveMessage.textContent = "Remove the item and marker, then tap Set Empty Background";
     requestAnimationFrame(processLoop);
   } catch (error) {
     const reason = error?.name === "NotAllowedError"
@@ -142,6 +171,8 @@ function stopCamera() {
   cameraState.textContent = "Camera off";
   cameraState.className = "pill idle";
   startButton.textContent = "Open Camera";
+  calibrateButton.disabled = true;
+  calibrateButton.textContent = "Set Empty Background";
   detectButton.disabled = true;
   captureButton.disabled = true;
   detectionStatus.textContent = "Waiting for camera";
@@ -149,6 +180,8 @@ function stopCamera() {
   fpsText.textContent = "—";
   markerStatus.textContent = "Checked after Capture";
   detectionActive = false;
+  liveMarker = null;
+  markerMissingFrames = 0;
 }
 
 function showCameraError(message) {
@@ -207,27 +240,34 @@ function processFrame() {
     drawOverlay(null, null);
     detectionStatus.textContent = "Calibration required";
     confidenceText.textContent = "—";
-    markerStatus.textContent = "Checked after Capture";
+    markerStatus.textContent = "Waiting for background";
     captureButton.disabled = true;
     return;
   }
 
   if (!detectionActive) {
     drawOverlay(null, null);
-    markerStatus.textContent = "Checked after Capture";
+    markerStatus.textContent = "Waiting for Detect Object";
     captureButton.disabled = true;
     return;
   }
 
   const alignment = estimateBackgroundOffset(frame.data, backgroundFrame, width, height, 6);
-  markerStatus.textContent = "Checked after Capture";
+  const detectedMarker = detectReferenceMarker(frame.data, width, height);
+  if (detectedMarker) {
+    liveMarker = { ...detectedMarker };
+    markerMissingFrames = 0;
+  } else {
+    markerMissingFrames += 1;
+    if (markerMissingFrames > 10) liveMarker = null;
+  }
+  markerStatus.textContent = liveMarker ? "Detected" : "Not detected";
   const mask = maskFromSavedBackground(
     frame.data, backgroundFrame, width, height, threshold, alignment.dx, alignment.dy
   );
-  const silentMarker = detectReferenceMarker(frame.data, width, height);
-  if (silentMarker) {
-    const margin = Math.max(4, Math.round(Math.max(silentMarker.width, silentMarker.height) * 0.25));
-    clearMaskRegion(mask, width, height, silentMarker, margin);
+  if (liveMarker) {
+    const margin = Math.max(4, Math.round(Math.max(liveMarker.width, liveMarker.height) * 0.25));
+    clearMaskRegion(mask, width, height, liveMarker, margin);
   }
 
   closeSmallGaps(mask, width, height, 1);
@@ -244,7 +284,7 @@ function processFrame() {
     lastMeasurementBox = null;
     lastMarker = null;
     captureButton.disabled = false;
-    drawOverlay(null, null);
+    drawOverlay(null, liveMarker);
     detectionStatus.textContent = "No clear object";
     confidenceText.textContent = "—";
     liveMessage.textContent = "Live item frame not found — you may still Capture for photo analysis";
@@ -262,7 +302,7 @@ function processFrame() {
   lastMeasurementBox = { ...candidate };
   lastMarker = null;
   captureButton.disabled = false;
-  drawOverlay(smoothedBox, null);
+  drawOverlay(smoothedBox, liveMarker);
   detectionStatus.textContent = "Item framed";
   confidenceText.textContent = `${Math.round(confidence * 100)}%`;
   liveMessage.textContent = candidate.touchesEdge
@@ -352,7 +392,19 @@ async function captureCurrentObject() {
   fullCtx.drawImage(video, 0, 0, full.width, full.height);
 
   const fullFrame = fullCtx.getImageData(0, 0, full.width, full.height);
-  const capturedMarker = detectReferenceMarker(fullFrame.data, full.width, full.height);
+  let capturedMarker = detectReferenceMarker(fullFrame.data, full.width, full.height);
+  let markerSource = capturedMarker ? "captured photo" : "";
+  if (!capturedMarker && liveMarker) {
+    const liveScaleX = full.width / workCanvas.width;
+    const liveScaleY = full.height / workCanvas.height;
+    capturedMarker = {
+      x: liveMarker.x * liveScaleX,
+      y: liveMarker.y * liveScaleY,
+      width: liveMarker.width * liveScaleX,
+      height: liveMarker.height * liveScaleY
+    };
+    markerSource = "stable live detection";
+  }
   const analysisCanvas = document.createElement("canvas");
   analysisCanvas.width = workCanvas.width;
   analysisCanvas.height = workCanvas.height;
@@ -407,7 +459,7 @@ async function captureCurrentObject() {
   pixelSize.textContent = `${w} × ${h} px`;
   imageSize.textContent = `${full.width} × ${full.height}`;
   frameCoverage.textContent = `${((w * h) / (full.width * full.height) * 100).toFixed(1)}%`;
-  markerStatus.textContent = capturedMarker ? "Detected in photo" : "Not detected in photo";
+  markerStatus.textContent = capturedMarker ? `Detected from ${markerSource}` : "Not detected";
   if (!capturedMarker || !capturedItem || capturedItem.touchesEdge) {
     analysisStatus.textContent = "REVIEW REQUIRED";
     analysisReason.textContent = !capturedMarker
@@ -475,7 +527,7 @@ function maskFromSavedBackground(data, background, width, height, threshold, off
       const colourDistance = Math.sqrt(dr * dr + dg * dg + db * db);
       const oldLuma = 0.299 * background[bi] + 0.587 * background[bi + 1] + 0.114 * background[bi + 2];
       const newLuma = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-      const signedLumaRatio = (newLuma - oldLuma) / Math.max(35, oldLuma);
+      const lumaRatio = Math.abs(newLuma - oldLuma) / Math.max(35, oldLuma);
       const oldSum = Math.max(30, background[bi] + background[bi + 1] + background[bi + 2]);
       const newSum = Math.max(30, data[i] + data[i + 1] + data[i + 2]);
       const chromaDistance = Math.sqrt(
@@ -483,10 +535,9 @@ function maskFromSavedBackground(data, background, width, height, threshold, off
         Math.pow(data[i + 1] / newSum - background[bi + 1] / oldSum, 2) +
         Math.pow(data[i + 2] / newSum - background[bi + 2] / oldSum, 2)
       ) * 255;
-      const brighterObject = signedLumaRatio > 0.12;
-      const darkerObject = signedLumaRatio < -0.30;
-      const realColourChange = chromaDistance > 7;
-      mask[p] = colourDistance > threshold * 0.88 && (brighterObject || darkerObject || realColourChange) ? 1 : 0;
+      const strongBrightnessChange = lumaRatio > 0.24;
+      const realColourChange = chromaDistance > 9;
+      mask[p] = colourDistance > threshold && (strongBrightnessChange || realColourChange) ? 1 : 0;
     }
   }
   return mask;
@@ -710,12 +761,12 @@ document.addEventListener("visibilitychange", () => {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=0.6.1")
+    navigator.serviceWorker.register("service-worker.js?v=0.7.0")
       .then(registration => registration.update())
       .catch(() => {});
     navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (sessionStorage.getItem("live-object-frame-reloaded") === "0.6.1") return;
-      sessionStorage.setItem("live-object-frame-reloaded", "0.6.1");
+      if (sessionStorage.getItem("live-object-frame-reloaded") === "0.7.0") return;
+      sessionStorage.setItem("live-object-frame-reloaded", "0.7.0");
       window.location.reload();
     });
   });

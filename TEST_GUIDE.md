@@ -22,14 +22,15 @@ It measures the captured view's Horizontal × Vertical size. It does not infer a
 2. Double-click `start_local_server.bat`.
 3. Open Chrome or Edge.
 4. Go to `http://localhost:8000`.
-5. Click **Open Camera** while the background is empty. Setup is automatic.
+5. Click **Open Camera** while the background is empty.
 6. Allow camera permission.
-7. Place one object and the marker in front of the background without moving the phone.
-8. Click **Detect Object**.
-9. Confirm the green frame contains the complete item. The marker only needs to remain visible elsewhere in the camera view and is checked after Capture.
-10. Tap the round Camera icon beside the live view.
-11. Confirm the cropped preview and centimetre values.
-12. Use the phone Share sheet to choose Save Image / Save to Photos. Use Download only as a fallback.
+7. With the scene still empty, click **Set Empty Background** and keep the phone still.
+8. Place one object and the marker in front of the saved background without moving the phone.
+9. Click **Detect Object**.
+10. Confirm the green frame contains the item and the cyan frame contains the 5 cm marker.
+11. Tap the round Camera icon beside the live view.
+12. Confirm the cropped preview and centimetre values.
+13. Use the phone Share sheet to choose Save Image / Save to Photos. Use Download only as a fallback.
 
 Do not double-click `index.html` directly. Camera access requires a web origin such as localhost or HTTPS.
 
@@ -37,13 +38,13 @@ Do not double-click `index.html` directly. Camera access requires a web origin s
 
 1. Choose the final camera position and distance.
 2. Keep the scene empty and click **Open Camera**.
-3. Wait for `Ready to detect`.
+3. Click **Set Empty Background** and wait for `Empty background saved`.
 4. Place the object and marker without moving the phone.
-5. Click **Detect Object**. The green frame follows the main item only; it does not merge the marker, shadows or separate background regions.
+5. Click **Detect Object**. The green frame follows the main item and the cyan frame follows the marker.
 6. Live marker detection does not block Capture. Marker and item identification happen after the photo is captured.
 7. If the live green item frame is not found, Capture remains available so the frozen photo can still be analysed.
 
-Small hand movements are compensated automatically. If lighting, zoom, camera distance or camera angle changes clearly, close and reopen Camera while the scene is empty. The system will automatically reset its background.
+Small hand movements are compensated automatically. If lighting, zoom, camera distance or camera angle changes clearly, remove the item and marker, then tap **Set Empty Background Again**.
 
 For a small item, move the phone to the desired position **before** calibration. Do not move closer after calibration. The default minimum size is now 0.2%; lower it to 0.1% only when necessary.
 
@@ -91,7 +92,7 @@ For every test, record:
 ## Current Phase 2B limitations
 
 - It detects the main foreground region; it does not recognise product names or categories.
-- Empty-background setup happens automatically when Camera opens.
+- Empty-background setup is manual so the user controls the exact empty scene and camera position.
 - Live view frames the capture area only; the frozen captured photo is used for marker detection and measurement.
 - Normal small hand movements are compensated. Moving much closer, zooming or changing the camera angle still changes the scene geometry and requires reopening Camera with an empty scene.
 - Transparent, reflective and very low-contrast items remain difficult.
