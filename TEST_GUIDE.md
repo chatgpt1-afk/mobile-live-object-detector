@@ -26,7 +26,7 @@ It measures the captured view's Horizontal × Vertical size. It does not infer a
 6. Allow camera permission.
 7. Place one object and the marker in front of the background without moving the phone.
 8. Click **Detect Object**.
-9. Confirm one green frame contains the complete item and reference marker. The marker is intentionally checked only after Capture.
+9. Confirm the green frame contains the complete item. The marker only needs to remain visible elsewhere in the camera view and is checked after Capture.
 10. Tap the round Camera icon beside the live view.
 11. Confirm the cropped preview and centimetre values.
 12. Use the phone Share sheet to choose Save Image / Save to Photos. Use Download only as a fallback.
@@ -39,8 +39,9 @@ Do not double-click `index.html` directly. Camera access requires a web origin s
 2. Keep the scene empty and click **Open Camera**.
 3. Wait for `Ready to detect`.
 4. Place the object and marker without moving the phone.
-5. Click **Detect Object**. The green frame now represents the combined capture area containing the item and marker.
+5. Click **Detect Object**. The green frame follows the main item only; it does not merge the marker, shadows or separate background regions.
 6. Live marker detection does not block Capture. Marker and item identification happen after the photo is captured.
+7. If the live green item frame is not found, Capture remains available so the frozen photo can still be analysed.
 
 Small hand movements are compensated automatically. If lighting, zoom, camera distance or camera angle changes clearly, close and reopen Camera while the scene is empty. The system will automatically reset its background.
 
@@ -74,7 +75,7 @@ Test at least:
 
 For every test, record:
 
-- Does the box cover the complete item and reference marker?
+- Does the green box cover the complete item without expanding to the marker or background?
 - Does it include shadows?
 - Does it jump to the background?
 - Does it continue following while the object moves?

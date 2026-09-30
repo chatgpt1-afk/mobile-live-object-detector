@@ -78,10 +78,10 @@ detectButton.addEventListener("click", () => {
   lastValidBox = null;
   lastMarker = null;
   lastMeasurementBox = null;
-  captureButton.disabled = true;
+  captureButton.disabled = false;
   detectButton.textContent = "Detecting…";
-  detectionStatus.textContent = "Framing item and marker";
-  liveMessage.textContent = "Keep the complete item and reference marker inside the green frame";
+  detectionStatus.textContent = "Looking for item";
+  liveMessage.textContent = "Keep the item near the centre and keep the marker visible elsewhere in the camera view";
 });
 
 captureButton.addEventListener("click", captureCurrentObject);
@@ -112,7 +112,7 @@ async function startCamera() {
     cameraState.className = "pill live";
     startButton.textContent = "Close Camera";
     detectButton.disabled = true;
-    captureButton.disabled = true;
+    captureButton.disabled = false;
     resizeCanvases();
     detectionStatus.textContent = "Automatic setup";
     liveMessage.textContent = "Keep the scene empty and hold the phone still";
@@ -224,11 +224,16 @@ function processFrame() {
   const mask = maskFromSavedBackground(
     frame.data, backgroundFrame, width, height, threshold, alignment.dx, alignment.dy
   );
+  const silentMarker = detectReferenceMarker(frame.data, width, height);
+  if (silentMarker) {
+    const margin = Math.max(4, Math.round(Math.max(silentMarker.width, silentMarker.height) * 0.25));
+    clearMaskRegion(mask, width, height, silentMarker, margin);
+  }
 
   closeSmallGaps(mask, width, height, 1);
   majorityFilter(mask, width, height, 1);
   const minimumPixels = width * height * Number(minAreaInput.value) / 1000;
-  const candidate = combinedForegroundBounds(mask, width, height, minimumPixels);
+  const candidate = largestCentralComponent(mask, width, height, minimumPixels);
 
   if (!candidate) {
     missingFrames += 1;
@@ -238,11 +243,11 @@ function processFrame() {
     lastValidBox = null;
     lastMeasurementBox = null;
     lastMarker = null;
-    captureButton.disabled = true;
+    captureButton.disabled = false;
     drawOverlay(null, null);
     detectionStatus.textContent = "No clear object";
     confidenceText.textContent = "—";
-    liveMessage.textContent = "No object found — keep the phone still or lower Minimum Object Size";
+    liveMessage.textContent = "Live item frame not found — you may still Capture for photo analysis";
     return;
   }
 
@@ -256,13 +261,13 @@ function processFrame() {
   lastValidBox = { ...smoothedBox };
   lastMeasurementBox = { ...candidate };
   lastMarker = null;
-  captureButton.disabled = stableFrames < 3 || candidate.touchesEdge;
+  captureButton.disabled = false;
   drawOverlay(smoothedBox, null);
-  detectionStatus.textContent = "Capture area framed";
+  detectionStatus.textContent = "Item framed";
   confidenceText.textContent = `${Math.round(confidence * 100)}%`;
   liveMessage.textContent = candidate.touchesEdge
-    ? "Move back: part of the item or marker may be outside the picture"
-    : stableFrames < 3 ? "Hold steady — preparing Capture" : "Check that the complete item and marker are inside the frame, then Capture";
+    ? "Move back: part of the item may be outside the picture"
+    : stableFrames < 3 ? "Hold steady — preparing Capture" : "Item ready — make sure the marker is also visible, then Capture";
   if (!captureButton.disabled) detectButton.textContent = "Detect New Object";
 }
 
@@ -336,7 +341,7 @@ function clearMaskRegion(mask, width, height, box, margin) {
 }
 
 async function captureCurrentObject() {
-  if (!running || !lastValidBox || stableFrames < 3 || video.readyState < 2) return;
+  if (!running || !detectionActive || video.readyState < 2) return;
   captureButton.disabled = true;
   captureButton.setAttribute("aria-label", "Capturing");
   captureButton.title = "Capturing";
@@ -384,7 +389,7 @@ async function captureCurrentObject() {
   const sy = full.height / analysisCanvas.height;
   const itemForCrop = capturedItem
     ? expandBox(capturedItem, analysisCanvas.width, analysisCanvas.height, 0.035)
-    : lastValidBox;
+    : lastValidBox || { x: 0, y: 0, width: analysisCanvas.width, height: analysisCanvas.height };
   const x = Math.max(0, Math.floor(itemForCrop.x * sx));
   const y = Math.max(0, Math.floor(itemForCrop.y * sy));
   const w = Math.min(full.width - x, Math.ceil(itemForCrop.width * sx));
@@ -470,7 +475,7 @@ function maskFromSavedBackground(data, background, width, height, threshold, off
       const colourDistance = Math.sqrt(dr * dr + dg * dg + db * db);
       const oldLuma = 0.299 * background[bi] + 0.587 * background[bi + 1] + 0.114 * background[bi + 2];
       const newLuma = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-      const lumaRatio = Math.abs(newLuma - oldLuma) / Math.max(35, oldLuma);
+      const signedLumaRatio = (newLuma - oldLuma) / Math.max(35, oldLuma);
       const oldSum = Math.max(30, background[bi] + background[bi + 1] + background[bi + 2]);
       const newSum = Math.max(30, data[i] + data[i + 1] + data[i + 2]);
       const chromaDistance = Math.sqrt(
@@ -478,9 +483,10 @@ function maskFromSavedBackground(data, background, width, height, threshold, off
         Math.pow(data[i + 1] / newSum - background[bi + 1] / oldSum, 2) +
         Math.pow(data[i + 2] / newSum - background[bi + 2] / oldSum, 2)
       ) * 255;
-      const strongBrightnessChange = lumaRatio > 0.24;
-      const realColourChange = chromaDistance > 9;
-      mask[p] = colourDistance > threshold && (strongBrightnessChange || realColourChange) ? 1 : 0;
+      const brighterObject = signedLumaRatio > 0.12;
+      const darkerObject = signedLumaRatio < -0.30;
+      const realColourChange = chromaDistance > 7;
+      mask[p] = colourDistance > threshold * 0.88 && (brighterObject || darkerObject || realColourChange) ? 1 : 0;
     }
   }
   return mask;
@@ -562,48 +568,6 @@ function closeSmallGaps(mask, width, height, radius) {
       mask[y * width + x] = all;
     }
   }
-}
-
-function combinedForegroundBounds(mask, width, height, minimumPixels) {
-  const visited = new Uint8Array(mask.length);
-  const queue = new Int32Array(mask.length);
-  const components = [];
-  for (let start = 0; start < mask.length; start++) {
-    if (!mask[start] || visited[start]) continue;
-    let head = 0, tail = 0, area = 0;
-    let minX = width, minY = height, maxX = 0, maxY = 0;
-    queue[tail++] = start;
-    visited[start] = 1;
-    while (head < tail) {
-      const index = queue[head++];
-      const x = index % width;
-      const y = Math.floor(index / width);
-      area++;
-      minX = Math.min(minX, x); maxX = Math.max(maxX, x);
-      minY = Math.min(minY, y); maxY = Math.max(maxY, y);
-      const neighbours = [index - 1, index + 1, index - width, index + width];
-      for (const next of neighbours) {
-        if (next < 0 || next >= mask.length || visited[next] || !mask[next]) continue;
-        if (Math.abs(next % width - x) > 1) continue;
-        visited[next] = 1;
-        queue[tail++] = next;
-      }
-    }
-    if (area >= minimumPixels) components.push({ area, minX, minY, maxX, maxY });
-  }
-  if (!components.length) return null;
-  components.sort((a, b) => b.area - a.area);
-  const cutoff = Math.max(minimumPixels, components[0].area * 0.08);
-  const included = components.filter(component => component.area >= cutoff).slice(0, 4);
-  const minX = Math.min(...included.map(component => component.minX));
-  const minY = Math.min(...included.map(component => component.minY));
-  const maxX = Math.max(...included.map(component => component.maxX));
-  const maxY = Math.max(...included.map(component => component.maxY));
-  const area = included.reduce((sum, component) => sum + component.area, 0);
-  return {
-    x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1, area,
-    touchesEdge: minX <= 2 || minY <= 2 || maxX >= width - 3 || maxY >= height - 3
-  };
 }
 
 function largestCentralComponent(mask, width, height, minimumPixels) {
@@ -746,12 +710,12 @@ document.addEventListener("visibilitychange", () => {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=0.6.0")
+    navigator.serviceWorker.register("service-worker.js?v=0.6.1")
       .then(registration => registration.update())
       .catch(() => {});
     navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (sessionStorage.getItem("live-object-frame-reloaded") === "0.6.0") return;
-      sessionStorage.setItem("live-object-frame-reloaded", "0.6.0");
+      if (sessionStorage.getItem("live-object-frame-reloaded") === "0.6.1") return;
+      sessionStorage.setItem("live-object-frame-reloaded", "0.6.1");
       window.location.reload();
     });
   });
