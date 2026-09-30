@@ -14,6 +14,7 @@ It measures the captured view's Horizontal × Vertical size. It does not infer a
 4. Measure the outer black square with a ruler. It must be exactly 5.00 cm × 5.00 cm.
 5. Cut along the outer cut line without cutting the black square.
 6. Keep the marker flat and place it beside the object in the same measurement plane.
+7. Use one cut-out marker and leave a visible gap between the marker and the item. Do not use the full sheet containing all four marker copies.
 
 ## Test A — First verify it on the computer
 
@@ -25,7 +26,7 @@ It measures the captured view's Horizontal × Vertical size. It does not infer a
 6. Allow camera permission.
 7. Place one object and the marker in front of the background without moving the phone.
 8. Click **Detect Object**.
-9. Confirm the green object frame and cyan `5 CM REFERENCE` screen overlay appear.
+9. Confirm one green frame contains the complete item and reference marker. The marker is intentionally checked only after Capture.
 10. Tap the round Camera icon beside the live view.
 11. Confirm the cropped preview and centimetre values.
 12. Use the phone Share sheet to choose Save Image / Save to Photos. Use Download only as a fallback.
@@ -38,7 +39,8 @@ Do not double-click `index.html` directly. Camera access requires a web origin s
 2. Keep the scene empty and click **Open Camera**.
 3. Wait for `Ready to detect`.
 4. Place the object and marker without moving the phone.
-5. Click **Detect Object**.
+5. Click **Detect Object**. The green frame now represents the combined capture area containing the item and marker.
+6. Live marker detection does not block Capture. Marker and item identification happen after the photo is captured.
 
 Small hand movements are compensated automatically. If lighting, zoom, camera distance or camera angle changes clearly, close and reopen Camera while the scene is empty. The system will automatically reset its background.
 
@@ -72,7 +74,7 @@ Test at least:
 
 For every test, record:
 
-- Does the box cover the complete object?
+- Does the box cover the complete item and reference marker?
 - Does it include shadows?
 - Does it jump to the background?
 - Does it continue following while the object moves?
@@ -89,6 +91,7 @@ For every test, record:
 
 - It detects the main foreground region; it does not recognise product names or categories.
 - Empty-background setup happens automatically when Camera opens.
+- Live view frames the capture area only; the frozen captured photo is used for marker detection and measurement.
 - Normal small hand movements are compensated. Moving much closer, zooming or changing the camera angle still changes the scene geometry and requires reopening Camera with an empty scene.
 - Transparent, reflective and very low-contrast items remain difficult.
 - The system measures only the current 2D Horizontal × Vertical view; it does not infer a third dimension.

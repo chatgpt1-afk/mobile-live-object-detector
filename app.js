@@ -17,6 +17,8 @@ const frameCoverage = document.querySelector("#frameCoverage");
 const horizontalSize = document.querySelector("#horizontalSize");
 const verticalSize = document.querySelector("#verticalSize");
 const referenceScale = document.querySelector("#referenceScale");
+const analysisStatus = document.querySelector("#analysisStatus");
+const analysisReason = document.querySelector("#analysisReason");
 const downloadCapture = document.querySelector("#downloadCapture");
 const saveToPhotos = document.querySelector("#saveToPhotos");
 const thresholdInput = document.querySelector("#threshold");
@@ -78,8 +80,8 @@ detectButton.addEventListener("click", () => {
   lastMeasurementBox = null;
   captureButton.disabled = true;
   detectButton.textContent = "Detecting…";
-  detectionStatus.textContent = "Looking for object and marker";
-  liveMessage.textContent = "Keep the phone still while the system frames the item";
+  detectionStatus.textContent = "Framing item and marker";
+  liveMessage.textContent = "Keep the complete item and reference marker inside the green frame";
 });
 
 captureButton.addEventListener("click", captureCurrentObject);
@@ -145,7 +147,7 @@ function stopCamera() {
   detectionStatus.textContent = "Waiting for camera";
   confidenceText.textContent = "—";
   fpsText.textContent = "—";
-  markerStatus.textContent = "Not detected";
+  markerStatus.textContent = "Checked after Capture";
   detectionActive = false;
 }
 
@@ -205,30 +207,28 @@ function processFrame() {
     drawOverlay(null, null);
     detectionStatus.textContent = "Calibration required";
     confidenceText.textContent = "—";
-    markerStatus.textContent = "Not detected";
+    markerStatus.textContent = "Checked after Capture";
     captureButton.disabled = true;
     return;
   }
 
   if (!detectionActive) {
     drawOverlay(null, null);
-    markerStatus.textContent = "Waiting";
+    markerStatus.textContent = "Checked after Capture";
     captureButton.disabled = true;
     return;
   }
 
   const alignment = estimateBackgroundOffset(frame.data, backgroundFrame, width, height, 6);
-  const marker = detectReferenceMarker(frame.data, width, height);
-  markerStatus.textContent = marker ? "Detected" : "Not detected";
+  markerStatus.textContent = "Checked after Capture";
   const mask = maskFromSavedBackground(
     frame.data, backgroundFrame, width, height, threshold, alignment.dx, alignment.dy
   );
-  if (marker) clearMaskRegion(mask, width, height, marker, 4);
 
   closeSmallGaps(mask, width, height, 1);
   majorityFilter(mask, width, height, 1);
   const minimumPixels = width * height * Number(minAreaInput.value) / 1000;
-  const candidate = largestCentralComponent(mask, width, height, minimumPixels);
+  const candidate = combinedForegroundBounds(mask, width, height, minimumPixels);
 
   if (!candidate) {
     missingFrames += 1;
@@ -237,9 +237,9 @@ function processFrame() {
     previousDetectionBox = null;
     lastValidBox = null;
     lastMeasurementBox = null;
-    lastMarker = marker ? { ...marker } : null;
+    lastMarker = null;
     captureButton.disabled = true;
-    drawOverlay(null, marker);
+    drawOverlay(null, null);
     detectionStatus.textContent = "No clear object";
     confidenceText.textContent = "—";
     liveMessage.textContent = "No object found — keep the phone still or lower Minimum Object Size";
@@ -255,15 +255,14 @@ function processFrame() {
   previousDetectionBox = { ...smoothedBox };
   lastValidBox = { ...smoothedBox };
   lastMeasurementBox = { ...candidate };
-  lastMarker = marker ? { ...marker } : null;
-  captureButton.disabled = stableFrames < 5 || candidate.touchesEdge || !marker;
-  drawOverlay(smoothedBox, marker);
-  detectionStatus.textContent = "Object framed";
+  lastMarker = null;
+  captureButton.disabled = stableFrames < 3 || candidate.touchesEdge;
+  drawOverlay(smoothedBox, null);
+  detectionStatus.textContent = "Capture area framed";
   confidenceText.textContent = `${Math.round(confidence * 100)}%`;
   liveMessage.textContent = candidate.touchesEdge
-    ? "Move back: part of the item may be outside the picture"
-    : !marker ? "Place the printed 5 cm marker beside the object"
-      : stableFrames < 5 ? "Hold steady — preparing Capture" : "Object and marker ready — Capture is available";
+    ? "Move back: part of the item or marker may be outside the picture"
+    : stableFrames < 3 ? "Hold steady — preparing Capture" : "Check that the complete item and marker are inside the frame, then Capture";
   if (!captureButton.disabled) detectButton.textContent = "Detect New Object";
 }
 
@@ -309,7 +308,7 @@ function detectReferenceMarker(data, width, height) {
     const boxW = maxX - minX + 1, boxH = maxY - minY + 1;
     const aspect = boxW / Math.max(1, boxH);
     const fill = area / Math.max(1, boxW * boxH);
-    if (boxW < 12 || boxH < 12 || aspect < 0.80 || aspect > 1.25 || fill < 0.24 || fill > 0.72) continue;
+    if (boxW < 12 || boxH < 12 || aspect < 0.70 || aspect > 1.40 || fill < 0.10 || fill > 0.85) continue;
     if (!matchesBlackWhiteMarkerPattern(data, width, height, { x:minX, y:minY, width:boxW, height:boxH })) continue;
     const score = area * (1 - Math.abs(1 - aspect));
     if (!best || score > best.score) best = { x:minX, y:minY, width:boxW, height:boxH, area, score };
@@ -337,20 +336,59 @@ function clearMaskRegion(mask, width, height, box, margin) {
 }
 
 async function captureCurrentObject() {
-  if (!running || !lastValidBox || !lastMeasurementBox || !lastMarker || stableFrames < 5 || video.readyState < 2) return;
+  if (!running || !lastValidBox || stableFrames < 3 || video.readyState < 2) return;
   captureButton.disabled = true;
-  captureButton.textContent = "Capturing…";
+  captureButton.setAttribute("aria-label", "Capturing");
+  captureButton.title = "Capturing";
   const full = document.createElement("canvas");
   full.width = video.videoWidth;
   full.height = video.videoHeight;
-  full.getContext("2d").drawImage(video, 0, 0, full.width, full.height);
+  const fullCtx = full.getContext("2d", { willReadFrequently: true });
+  fullCtx.drawImage(video, 0, 0, full.width, full.height);
 
-  const sx = full.width / workCanvas.width;
-  const sy = full.height / workCanvas.height;
-  const x = Math.max(0, Math.floor(lastValidBox.x * sx));
-  const y = Math.max(0, Math.floor(lastValidBox.y * sy));
-  const w = Math.min(full.width - x, Math.ceil(lastValidBox.width * sx));
-  const h = Math.min(full.height - y, Math.ceil(lastValidBox.height * sy));
+  const fullFrame = fullCtx.getImageData(0, 0, full.width, full.height);
+  const capturedMarker = detectReferenceMarker(fullFrame.data, full.width, full.height);
+  const analysisCanvas = document.createElement("canvas");
+  analysisCanvas.width = workCanvas.width;
+  analysisCanvas.height = workCanvas.height;
+  const analysisCtx = analysisCanvas.getContext("2d", { willReadFrequently: true });
+  analysisCtx.drawImage(full, 0, 0, analysisCanvas.width, analysisCanvas.height);
+  const smallFrame = analysisCtx.getImageData(0, 0, analysisCanvas.width, analysisCanvas.height);
+  const alignment = estimateBackgroundOffset(
+    smallFrame.data, backgroundFrame, analysisCanvas.width, analysisCanvas.height, 6
+  );
+  const capturedMask = maskFromSavedBackground(
+    smallFrame.data, backgroundFrame, analysisCanvas.width, analysisCanvas.height,
+    Number(thresholdInput.value), alignment.dx, alignment.dy
+  );
+  if (capturedMarker) {
+    const markerOnAnalysis = {
+      x: capturedMarker.x * analysisCanvas.width / full.width,
+      y: capturedMarker.y * analysisCanvas.height / full.height,
+      width: capturedMarker.width * analysisCanvas.width / full.width,
+      height: capturedMarker.height * analysisCanvas.height / full.height
+    };
+    const markerPaperMargin = Math.max(5, Math.round(Math.max(markerOnAnalysis.width, markerOnAnalysis.height) * 0.25));
+    clearMaskRegion(
+      capturedMask, analysisCanvas.width, analysisCanvas.height, markerOnAnalysis, markerPaperMargin
+    );
+  }
+  closeSmallGaps(capturedMask, analysisCanvas.width, analysisCanvas.height, 1);
+  majorityFilter(capturedMask, analysisCanvas.width, analysisCanvas.height, 1);
+  const minimumPixels = analysisCanvas.width * analysisCanvas.height * Number(minAreaInput.value) / 1000;
+  const capturedItem = largestCentralComponent(
+    capturedMask, analysisCanvas.width, analysisCanvas.height, minimumPixels
+  );
+
+  const sx = full.width / analysisCanvas.width;
+  const sy = full.height / analysisCanvas.height;
+  const itemForCrop = capturedItem
+    ? expandBox(capturedItem, analysisCanvas.width, analysisCanvas.height, 0.035)
+    : lastValidBox;
+  const x = Math.max(0, Math.floor(itemForCrop.x * sx));
+  const y = Math.max(0, Math.floor(itemForCrop.y * sy));
+  const w = Math.min(full.width - x, Math.ceil(itemForCrop.width * sx));
+  const h = Math.min(full.height - y, Math.ceil(itemForCrop.height * sy));
   const crop = document.createElement("canvas");
   crop.width = Math.max(1, w);
   crop.height = Math.max(1, h);
@@ -364,11 +402,26 @@ async function captureCurrentObject() {
   pixelSize.textContent = `${w} × ${h} px`;
   imageSize.textContent = `${full.width} × ${full.height}`;
   frameCoverage.textContent = `${((w * h) / (full.width * full.height) * 100).toFixed(1)}%`;
-  const markerPixels = (lastMarker.width + lastMarker.height) / 2;
-  const pixelsPerCm = markerPixels / 5;
-  horizontalSize.textContent = `${(lastMeasurementBox.width / pixelsPerCm).toFixed(2)} cm`;
-  verticalSize.textContent = `${(lastMeasurementBox.height / pixelsPerCm).toFixed(2)} cm`;
-  referenceScale.textContent = `${pixelsPerCm.toFixed(2)} px/cm`;
+  markerStatus.textContent = capturedMarker ? "Detected in photo" : "Not detected in photo";
+  if (!capturedMarker || !capturedItem || capturedItem.touchesEdge) {
+    analysisStatus.textContent = "REVIEW REQUIRED";
+    analysisReason.textContent = !capturedMarker
+      ? "5 cm reference marker not found in captured photo"
+      : !capturedItem ? "Item not found in captured photo" : "Detected item touches the image edge";
+    horizontalSize.textContent = "—";
+    verticalSize.textContent = "—";
+    referenceScale.textContent = capturedMarker
+      ? `${(((capturedMarker.width + capturedMarker.height) / 2) / 5).toFixed(2)} px/cm`
+      : "—";
+  } else {
+    const markerPixels = (capturedMarker.width + capturedMarker.height) / 2;
+    const pixelsPerCm = markerPixels / 5;
+    analysisStatus.textContent = "MEASURED";
+    analysisReason.textContent = "Marker and item identified from captured photo";
+    horizontalSize.textContent = `${(capturedItem.width * sx / pixelsPerCm).toFixed(2)} cm`;
+    verticalSize.textContent = `${(capturedItem.height * sy / pixelsPerCm).toFixed(2)} cm`;
+    referenceScale.textContent = `${pixelsPerCm.toFixed(2)} px/cm`;
+  }
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   capturedBlob = fullBlob;
   capturedFilename = `object-capture-${stamp}.jpg`;
@@ -376,7 +429,8 @@ async function captureCurrentObject() {
   downloadCapture.download = capturedFilename;
   captureResult.hidden = false;
   captureResult.scrollIntoView({ behavior: "smooth", block: "start" });
-  captureButton.textContent = "Capture Object";
+  captureButton.setAttribute("aria-label", "Capture object");
+  captureButton.title = "Capture object";
   captureButton.disabled = false;
   if (navigator.userActivation?.isActive && navigator.canShare) await shareCapturedPhoto(true);
 }
@@ -508,6 +562,48 @@ function closeSmallGaps(mask, width, height, radius) {
       mask[y * width + x] = all;
     }
   }
+}
+
+function combinedForegroundBounds(mask, width, height, minimumPixels) {
+  const visited = new Uint8Array(mask.length);
+  const queue = new Int32Array(mask.length);
+  const components = [];
+  for (let start = 0; start < mask.length; start++) {
+    if (!mask[start] || visited[start]) continue;
+    let head = 0, tail = 0, area = 0;
+    let minX = width, minY = height, maxX = 0, maxY = 0;
+    queue[tail++] = start;
+    visited[start] = 1;
+    while (head < tail) {
+      const index = queue[head++];
+      const x = index % width;
+      const y = Math.floor(index / width);
+      area++;
+      minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+      const neighbours = [index - 1, index + 1, index - width, index + width];
+      for (const next of neighbours) {
+        if (next < 0 || next >= mask.length || visited[next] || !mask[next]) continue;
+        if (Math.abs(next % width - x) > 1) continue;
+        visited[next] = 1;
+        queue[tail++] = next;
+      }
+    }
+    if (area >= minimumPixels) components.push({ area, minX, minY, maxX, maxY });
+  }
+  if (!components.length) return null;
+  components.sort((a, b) => b.area - a.area);
+  const cutoff = Math.max(minimumPixels, components[0].area * 0.08);
+  const included = components.filter(component => component.area >= cutoff).slice(0, 4);
+  const minX = Math.min(...included.map(component => component.minX));
+  const minY = Math.min(...included.map(component => component.minY));
+  const maxX = Math.max(...included.map(component => component.maxX));
+  const maxY = Math.max(...included.map(component => component.maxY));
+  const area = included.reduce((sum, component) => sum + component.area, 0);
+  return {
+    x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1, area,
+    touchesEdge: minX <= 2 || minY <= 2 || maxX >= width - 3 || maxY >= height - 3
+  };
 }
 
 function largestCentralComponent(mask, width, height, minimumPixels) {
@@ -650,12 +746,12 @@ document.addEventListener("visibilitychange", () => {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=0.5.1")
+    navigator.serviceWorker.register("service-worker.js?v=0.6.0")
       .then(registration => registration.update())
       .catch(() => {});
     navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (sessionStorage.getItem("live-object-frame-reloaded") === "0.5.1") return;
-      sessionStorage.setItem("live-object-frame-reloaded", "0.5.1");
+      if (sessionStorage.getItem("live-object-frame-reloaded") === "0.6.0") return;
+      sessionStorage.setItem("live-object-frame-reloaded", "0.6.0");
       window.location.reload();
     });
   });
