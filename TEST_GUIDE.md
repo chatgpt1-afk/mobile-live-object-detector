@@ -1,19 +1,10 @@
-# Phase 2B — Live Object Measurement Test
+# Phase 1 — Live Object Frame Test
 
 This project tests only:
 
-`Mobile camera → live foreground detection → moving bounding box → Capture → 5 cm reference measurement`
+`Mobile camera → live foreground detection → moving bounding box`
 
-It measures the captured view's Horizontal × Vertical size. It does not infer a third dimension and does not use the previous Front/Side/Top workflow.
-
-## Print the black-and-white reference marker
-
-1. Open `reference/5cm_reference_marker.pdf`.
-2. Print using **Actual Size / 100%**. Never choose Fit, Shrink or Scale to Page.
-3. Black-and-white printing is supported; colour ink is not required.
-4. Measure the outer black square with a ruler. It must be exactly 5.00 cm × 5.00 cm.
-5. Cut along the outer cut line without cutting the black square.
-6. Keep the marker flat and place it beside the object in the same measurement plane.
+It does **not** measure centimetres and does not use the previous Front/Side/Top workflow.
 
 ## Test A — First verify it on the computer
 
@@ -21,28 +12,22 @@ It measures the captured view's Horizontal × Vertical size. It does not infer a
 2. Double-click `start_local_server.bat`.
 3. Open Chrome or Edge.
 4. Go to `http://localhost:8000`.
-5. Click **Open Camera** while the background is empty. Setup is automatic.
+5. Click **Start Camera**.
 6. Allow camera permission.
-7. Place one object and the marker in front of the background without moving the phone.
-8. Click **Detect Object**.
-9. Confirm the green object frame and cyan `5 CM REFERENCE` screen overlay appear.
-10. Tap the round Camera icon beside the live view.
-11. Confirm the cropped preview and centimetre values.
-12. Use the phone Share sheet to choose Save Image / Save to Photos. Use Download only as a fallback.
+7. Place one object in front of a plain background.
+8. Move the object and check whether the green bounding box follows it.
 
 Do not double-click `index.html` directly. Camera access requires a web origin such as localhost or HTTPS.
 
-## Test B — Difficult background or small object
+## Test B — Difficult background
 
-1. Choose the final camera position and distance.
-2. Keep the scene empty and click **Open Camera**.
-3. Wait for `Ready to detect`.
-4. Place the object and marker without moving the phone.
-5. Click **Detect Object**.
+1. Fix the camera position.
+2. Remove the object.
+3. Click **Set Empty Background**.
+4. Do not move the camera.
+5. Place the object in the scene.
 
-If lighting, zoom, background or phone position changes, close and reopen Camera while the scene is empty. The system will automatically reset its background.
-
-For a small item, move the phone to the desired position **before** calibration. Do not move closer after calibration. The default minimum size is now 0.2%; lower it to 0.1% only when necessary.
+This method is useful for white, black, mesh or low-contrast objects. If lighting changes or the phone moves, set the empty background again.
 
 ## Test C — Real phone
 
@@ -57,7 +42,7 @@ The easiest free test is GitHub Pages:
 5. Select branch **main** and folder **/(root)**, then click **Save**.
 6. Wait for GitHub to show the HTTPS website address.
 7. Open that address on the phone using Chrome or Safari.
-8. Tap **Open Camera** and allow camera access.
+8. Tap **Start Camera** and allow camera access.
 
 ## What to record during the test
 
@@ -76,19 +61,17 @@ For every test, record:
 - Does it include shadows?
 - Does it jump to the background?
 - Does it continue following while the object moves?
-- Does reopening Camera with an empty scene improve the result?
-- Does Capture become available after the frame stops moving?
-- Does the cropped preview include the complete object without excessive background?
+- Does **Set Empty Background** improve the result?
 
 ## Detection settings
 
 - **Foreground sensitivity:** lower value detects smaller colour differences but may include shadows/noise. Higher value is stricter.
 - **Minimum object size:** increase it if the system frames small background marks. Decrease it for very small products.
 
-## Current Phase 2B limitations
+## Current Phase 1 limitations
 
 - It detects the main foreground region; it does not recognise product names or categories.
-- Empty-background setup happens automatically when Camera opens.
-- The phone must remain still after calibration; moving closer changes every background pixel and invalidates detection.
+- Auto Background works best with a plain background.
+- Empty Background mode requires the phone to remain still after calibration.
 - Transparent, reflective and very low-contrast items remain difficult.
-- The system measures only the current 2D Horizontal × Vertical view; it does not infer a third dimension.
+- No centimetre dimensions are calculated in this phase.
