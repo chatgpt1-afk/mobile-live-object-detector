@@ -9,16 +9,19 @@
   <title>Live Object Frame</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=0.8.0">
+  <link rel="stylesheet" href="styles.css?v=0.9.0">
 </head>
 <body>
   <main class="app-shell">
     <header class="topbar">
       <div>
-        <p class="eyebrow">PHASE 2B · VERSION 0.8.0</p>
+        <p class="eyebrow">PHASE 2B · VERSION 0.9.0</p>
         <h1>Live Object Frame</h1>
       </div>
-      <span id="cameraState" class="pill idle">Camera off</span>
+      <div class="header-actions">
+        <button id="historyButton" class="compact" type="button">History <span id="historyCount">0</span></button>
+        <span id="cameraState" class="pill idle">Camera off</span>
+      </div>
     </header>
 
     <section class="viewer" id="viewer" aria-label="Live camera preview">
@@ -94,6 +97,7 @@
       </div>
       <p class="measurement-note">This is a 2D Horizontal × Vertical measurement. After frame confirmation, the annotated image downloads automatically and its filename also contains H and V values. No third dimension is inferred.</p>
       <a id="downloadCapture" class="download-button fallback-download" download hidden>Download final image again</a>
+      <button id="nextItemButton" class="primary next-item-button" type="button" hidden>Next Item</button>
     </section>
 
     <details class="settings">
@@ -125,7 +129,54 @@
     </section>
   </main>
 
+  <dialog id="barcodeDialog" class="app-dialog">
+    <form id="barcodeForm" method="dialog">
+      <p class="eyebrow">PRODUCT IDENTIFICATION</p>
+      <h2>Enter Product Barcode</h2>
+      <label class="dialog-field">
+        <span>Barcode</span>
+        <input id="barcodeInput" type="text" autocomplete="off" enterkeyhint="done" placeholder="Key in product barcode" required>
+      </label>
+      <p id="barcodeMessage" class="dialog-message">Key in the barcode or scan it using the phone camera.</p>
+      <video id="barcodeVideo" class="barcode-video" autoplay muted playsinline hidden></video>
+      <div class="dialog-actions">
+        <button id="scanBarcodeButton" type="button">Scan Barcode</button>
+        <button id="stopBarcodeScanButton" type="button" hidden>Stop Scan</button>
+        <button class="primary" type="submit">Continue</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="saveRecordDialog" class="app-dialog">
+    <p class="eyebrow">CURRENT PRODUCT</p>
+    <h2>Save this measurement record?</h2>
+    <p id="saveRecordSummary" class="dialog-message"></p>
+    <div class="dialog-actions three-actions">
+      <button id="cancelNextItemButton" type="button">Cancel</button>
+      <button id="skipSaveButton" type="button">Don't Save</button>
+      <button id="saveRecordButton" class="primary" type="button">Save Record</button>
+    </div>
+  </dialog>
+
+  <dialog id="historyDialog" class="app-dialog history-dialog">
+    <div class="result-heading">
+      <div><p class="eyebrow">LOCAL RECORDS</p><h2>Measurement History</h2></div>
+      <button id="closeHistoryButton" class="compact" type="button">Close</button>
+    </div>
+    <div class="history-table-wrap">
+      <table class="history-table">
+        <thead><tr><th>No.</th><th>Barcode</th><th>Horizontal (cm)</th><th>Vertical (cm)</th><th>Frame</th><th>Measured At</th></tr></thead>
+        <tbody id="historyTableBody"></tbody>
+      </table>
+      <p id="emptyHistory" class="dialog-message">No saved records yet.</p>
+    </div>
+    <div class="dialog-actions">
+      <button id="clearHistoryButton" type="button">Clear History</button>
+      <button id="exportHistoryButton" class="primary" type="button">Generate Excel</button>
+    </div>
+  </dialog>
+
   <canvas id="processingCanvas" hidden></canvas>
-  <script src="app.js?v=0.8.0" defer></script>
+  <script src="app.js?v=0.9.0" defer></script>
 </body>
 </html>

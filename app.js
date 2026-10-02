@@ -31,6 +31,27 @@ const undoFrameButton = document.querySelector("#undoFrame");
 const redoFrameButton = document.querySelector("#redoFrame");
 const resetFrameButton = document.querySelector("#resetFrame");
 const confirmFrameButton = document.querySelector("#confirmFrame");
+const nextItemButton = document.querySelector("#nextItemButton");
+const barcodeDialog = document.querySelector("#barcodeDialog");
+const barcodeForm = document.querySelector("#barcodeForm");
+const barcodeInput = document.querySelector("#barcodeInput");
+const barcodeMessage = document.querySelector("#barcodeMessage");
+const barcodeVideo = document.querySelector("#barcodeVideo");
+const scanBarcodeButton = document.querySelector("#scanBarcodeButton");
+const stopBarcodeScanButton = document.querySelector("#stopBarcodeScanButton");
+const saveRecordDialog = document.querySelector("#saveRecordDialog");
+const saveRecordSummary = document.querySelector("#saveRecordSummary");
+const saveRecordButton = document.querySelector("#saveRecordButton");
+const skipSaveButton = document.querySelector("#skipSaveButton");
+const cancelNextItemButton = document.querySelector("#cancelNextItemButton");
+const historyButton = document.querySelector("#historyButton");
+const historyCount = document.querySelector("#historyCount");
+const historyDialog = document.querySelector("#historyDialog");
+const closeHistoryButton = document.querySelector("#closeHistoryButton");
+const historyTableBody = document.querySelector("#historyTableBody");
+const emptyHistory = document.querySelector("#emptyHistory");
+const clearHistoryButton = document.querySelector("#clearHistoryButton");
+const exportHistoryButton = document.querySelector("#exportHistoryButton");
 const thresholdInput = document.querySelector("#threshold");
 const minAreaInput = document.querySelector("#minArea");
 const thresholdValue = document.querySelector("#thresholdValue");
@@ -73,6 +94,11 @@ let frameHistory = [];
 let frameHistoryIndex = -1;
 let manualFrameEnabled = false;
 let frameGesture = null;
+let currentBarcode = "";
+let currentMeasurement = null;
+let barcodeStream = null;
+let barcodeScanRunning = false;
+let measurementRecords = loadMeasurementRecords();
 
 thresholdInput.addEventListener("input", () => {
   thresholdValue.value = thresholdInput.value;
@@ -144,6 +170,111 @@ frameEditor.addEventListener("pointerdown", beginFrameEdit);
 frameEditor.addEventListener("pointermove", moveFrameEdit);
 frameEditor.addEventListener("pointerup", endFrameEdit);
 frameEditor.addEventListener("pointercancel", endFrameEdit);
+barcodeForm.addEventListener("submit", acceptBarcode);
+scanBarcodeButton.addEventListener("click", startBarcodeScan);
+stopBarcodeScanButton.addEventListener("click", stopBarcodeScan);
+nextItemButton.addEventListener("click", requestNextItem);
+saveRecordButton.addEventListener("click", () => finishCurrentItem(true));
+skipSaveButton.addEventListener("click", () => finishCurrentItem(false));
+cancelNextItemButton.addEventListener("click", () => saveRecordDialog.close());
+historyButton.addEventListener("click", openHistory);
+closeHistoryButton.addEventListener("click", () => historyDialog.close());
+clearHistoryButton.addEventListener("click", clearMeasurementHistory);
+exportHistoryButton.addEventListener("click", exportMeasurementHistory);
+
+updateHistoryCount();
+queueMicrotask(() => openBarcodeDialog());
+
+barcodeDialog.addEventListener("cancel", event => event.preventDefault());
+
+function openBarcodeDialog() {
+  stopBarcodeScan();
+  barcodeInput.value = "";
+  barcodeMessage.textContent = "Key in the barcode or scan it using the phone camera.";
+  if (!barcodeDialog.open) barcodeDialog.showModal();
+  setTimeout(() => barcodeInput.focus(), 80);
+}
+
+function acceptBarcode(event) {
+  event.preventDefault();
+  const value = barcodeInput.value.trim();
+  if (!value) {
+    barcodeMessage.textContent = "Barcode is required before measuring the product.";
+    return;
+  }
+  currentBarcode = value;
+  currentMeasurement = null;
+  stopBarcodeScan();
+  barcodeDialog.close();
+  captureResult.hidden = true;
+  nextItemButton.hidden = true;
+  smoothedBox = null;
+  lastValidBox = null;
+  lastMeasurementBox = null;
+  detectionActive = false;
+  if (running && backgroundFrame) {
+    detectButton.disabled = false;
+    detectionStatus.textContent = "Ready for next item";
+    liveMessage.textContent = `Barcode ${currentBarcode}: place the product and marker, then tap Detect Object`;
+  } else {
+    detectionStatus.textContent = "Barcode ready";
+    liveMessage.textContent = `Barcode ${currentBarcode}: tap Open Camera to begin`;
+  }
+}
+
+async function startBarcodeScan() {
+  if (!("BarcodeDetector" in window)) {
+    barcodeMessage.textContent = "Barcode scanning is not supported by this browser. Please key in the barcode.";
+    return;
+  }
+  try {
+    const formats = await BarcodeDetector.getSupportedFormats();
+    const detector = formats.length ? new BarcodeDetector({ formats }) : new BarcodeDetector();
+    if (running && stream) {
+      barcodeVideo.srcObject = stream;
+    } else {
+      barcodeStream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: { ideal: "environment" } }
+      });
+      barcodeVideo.srcObject = barcodeStream;
+    }
+    await barcodeVideo.play();
+    barcodeVideo.hidden = false;
+    scanBarcodeButton.hidden = true;
+    stopBarcodeScanButton.hidden = false;
+    barcodeScanRunning = true;
+    barcodeMessage.textContent = "Point the camera at one barcode and hold still.";
+    const scan = async () => {
+      if (!barcodeScanRunning) return;
+      try {
+        const results = await detector.detect(barcodeVideo);
+        if (results.length) {
+          barcodeInput.value = results[0].rawValue;
+          barcodeMessage.textContent = `Barcode detected: ${results[0].rawValue}`;
+          stopBarcodeScan();
+          return;
+        }
+      } catch (_) {}
+      requestAnimationFrame(scan);
+    };
+    requestAnimationFrame(scan);
+  } catch (error) {
+    stopBarcodeScan();
+    barcodeMessage.textContent = `Unable to scan barcode: ${error?.message || "camera unavailable"}. Please key it in.`;
+  }
+}
+
+function stopBarcodeScan() {
+  barcodeScanRunning = false;
+  if (barcodeStream) barcodeStream.getTracks().forEach(track => track.stop());
+  barcodeStream = null;
+  barcodeVideo.pause();
+  barcodeVideo.srcObject = null;
+  barcodeVideo.hidden = true;
+  scanBarcodeButton.hidden = false;
+  stopBarcodeScanButton.hidden = true;
+}
 
 async function startCamera() {
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -409,6 +540,8 @@ function clearMaskRegion(mask, width, height, box, margin) {
 async function captureCurrentObject() {
   if (!running || !detectionActive || video.readyState < 2) return;
   captureButton.disabled = true;
+  currentMeasurement = null;
+  nextItemButton.hidden = true;
   captureButton.setAttribute("aria-label", "Capturing");
   captureButton.title = "Capturing";
   const full = document.createElement("canvas");
@@ -690,10 +823,14 @@ async function confirmFrameAndMeasure() {
   ctx.strokeRect(editableFrame.x, editableFrame.y, editableFrame.width, editableFrame.height);
   const fontSize = Math.max(30, output.width / 32);
   ctx.font = `700 ${fontSize}px system-ui, sans-serif`;
-  const lines = [`Horizontal: ${horizontalCm.toFixed(2)} cm`, `Vertical: ${verticalCm.toFixed(2)} cm`];
+  const lines = [
+    `Barcode: ${currentBarcode}`,
+    `Horizontal: ${horizontalCm.toFixed(2)} cm`,
+    `Vertical: ${verticalCm.toFixed(2)} cm`
+  ];
   const padding = fontSize * 0.45;
   const textWidth = Math.max(...lines.map(line => ctx.measureText(line).width));
-  const labelHeight = fontSize * 2.55;
+  const labelHeight = fontSize * 3.65;
   const labelX = Math.max(0, Math.min(output.width - textWidth - padding * 2, editableFrame.x));
   const preferredY = editableFrame.y - labelHeight - lineWidth;
   const labelY = preferredY >= 0 ? preferredY : Math.min(output.height - labelHeight, editableFrame.y + editableFrame.height + lineWidth);
@@ -702,12 +839,14 @@ async function confirmFrameAndMeasure() {
   ctx.fillStyle = "#ffffff";
   ctx.fillText(lines[0], labelX + padding, labelY + fontSize * 1.05);
   ctx.fillText(lines[1], labelX + padding, labelY + fontSize * 2.15);
+  ctx.fillText(lines[2], labelX + padding, labelY + fontSize * 3.25);
 
   capturedBlob = await canvasToBlob(output, 0.94);
   if (captureUrl) URL.revokeObjectURL(captureUrl);
   captureUrl = URL.createObjectURL(capturedBlob);
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  capturedFilename = `measured-H-${horizontalCm.toFixed(2)}cm_V-${verticalCm.toFixed(2)}cm-${stamp}.jpg`;
+  const safeBarcode = currentBarcode.replace(/[^a-z0-9_-]+/gi, "-").slice(0, 48) || "unknown";
+  capturedFilename = `${safeBarcode}_H-${horizontalCm.toFixed(2)}cm_V-${verticalCm.toFixed(2)}cm-${stamp}.jpg`;
   capturedPreview.src = captureUrl;
   capturedPreview.hidden = false;
   frameEditorStage.hidden = true;
@@ -719,7 +858,217 @@ async function confirmFrameAndMeasure() {
   downloadCapture.href = captureUrl;
   downloadCapture.download = capturedFilename;
   downloadCapture.hidden = false;
+  currentMeasurement = {
+    barcode: currentBarcode,
+    horizontalCm: Number(horizontalCm.toFixed(2)),
+    verticalCm: Number(verticalCm.toFixed(2)),
+    frameType: manualFrameEnabled ? "Manual" : "System",
+    measuredAt: new Date().toISOString(),
+    imageFilename: capturedFilename
+  };
+  nextItemButton.hidden = false;
   downloadCapture.click();
+}
+
+function requestNextItem() {
+  if (!currentMeasurement) return;
+  saveRecordSummary.textContent = `${currentMeasurement.barcode} — Horizontal ${currentMeasurement.horizontalCm.toFixed(2)} cm × Vertical ${currentMeasurement.verticalCm.toFixed(2)} cm`;
+  saveRecordDialog.showModal();
+}
+
+function finishCurrentItem(shouldSave) {
+  if (shouldSave && currentMeasurement) {
+    measurementRecords.push({ ...currentMeasurement });
+    localStorage.setItem("object-measurement-records-v1", JSON.stringify(measurementRecords));
+    updateHistoryCount();
+  }
+  saveRecordDialog.close();
+  currentMeasurement = null;
+  currentBarcode = "";
+  captureResult.hidden = true;
+  nextItemButton.hidden = true;
+  detectionActive = false;
+  smoothedBox = null;
+  lastValidBox = null;
+  lastMeasurementBox = null;
+  liveMarker = null;
+  markerMissingFrames = 0;
+  overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+  captureButton.disabled = true;
+  if (running && backgroundFrame) {
+    detectionStatus.textContent = "Waiting for next barcode";
+    liveMessage.textContent = "Remove the current product, then enter the next barcode";
+  }
+  openBarcodeDialog();
+}
+
+function loadMeasurementRecords() {
+  try {
+    const value = JSON.parse(localStorage.getItem("object-measurement-records-v1") || "[]");
+    return Array.isArray(value) ? value : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function updateHistoryCount() {
+  historyCount.textContent = String(measurementRecords.length);
+}
+
+function openHistory() {
+  renderHistory();
+  historyDialog.showModal();
+}
+
+function renderHistory() {
+  historyTableBody.replaceChildren();
+  measurementRecords.forEach((record, index) => {
+    const row = document.createElement("tr");
+    const values = [
+      index + 1,
+      record.barcode,
+      Number(record.horizontalCm).toFixed(2),
+      Number(record.verticalCm).toFixed(2),
+      record.frameType,
+      formatRecordDate(record.measuredAt)
+    ];
+    values.forEach(value => {
+      const cell = document.createElement("td");
+      cell.textContent = value;
+      row.appendChild(cell);
+    });
+    historyTableBody.appendChild(row);
+  });
+  emptyHistory.hidden = measurementRecords.length > 0;
+  exportHistoryButton.disabled = measurementRecords.length === 0;
+  clearHistoryButton.disabled = measurementRecords.length === 0;
+}
+
+function formatRecordDate(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value || "") : date.toLocaleString();
+}
+
+function clearMeasurementHistory() {
+  if (!measurementRecords.length) return;
+  if (!window.confirm("Clear all measurement history? This cannot be undone.")) return;
+  measurementRecords = [];
+  localStorage.removeItem("object-measurement-records-v1");
+  updateHistoryCount();
+  renderHistory();
+}
+
+function exportMeasurementHistory() {
+  if (!measurementRecords.length) return;
+  const blob = buildMeasurementWorkbook(measurementRecords);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `object-measurement-history-${new Date().toISOString().slice(0, 10)}.xlsx`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+function buildMeasurementWorkbook(records) {
+  const rows = [
+    ["No.", "Barcode", "Horizontal (cm)", "Vertical (cm)", "Frame Type", "Measured At", "Image Filename"],
+    ...records.map((record, index) => [
+      index + 1, record.barcode, Number(record.horizontalCm), Number(record.verticalCm),
+      record.frameType, formatRecordDate(record.measuredAt), record.imageFilename || ""
+    ])
+  ];
+  const sheetRows = rows.map((row, rowIndex) => {
+    const cells = row.map((value, columnIndex) => {
+      const ref = `${excelColumnName(columnIndex + 1)}${rowIndex + 1}`;
+      if (typeof value === "number") return `<c r="${ref}"><v>${value}</v></c>`;
+      return `<c r="${ref}" t="inlineStr"><is><t>${xmlEscape(String(value))}</t></is></c>`;
+    }).join("");
+    return `<row r="${rowIndex + 1}">${cells}</row>`;
+  }).join("");
+  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="1" max="1" width="8" customWidth="1"/><col min="2" max="2" width="22" customWidth="1"/><col min="3" max="4" width="18" customWidth="1"/><col min="5" max="5" width="14" customWidth="1"/><col min="6" max="6" width="24" customWidth="1"/><col min="7" max="7" width="48" customWidth="1"/></cols><sheetData>${sheetRows}</sheetData><autoFilter ref="A1:G${rows.length}"/></worksheet>`;
+  const files = {
+    "[Content_Types].xml": `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`,
+    "_rels/.rels": `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
+    "xl/workbook.xml": `<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Measurement History" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
+    "xl/worksheets/sheet1.xml": sheet
+  };
+  return new Blob([createStoredZip(files)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
+
+function excelColumnName(number) {
+  let name = "";
+  while (number > 0) {
+    number--;
+    name = String.fromCharCode(65 + number % 26) + name;
+    number = Math.floor(number / 26);
+  }
+  return name;
+}
+
+function xmlEscape(value) {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+}
+
+function createStoredZip(fileMap) {
+  const encoder = new TextEncoder();
+  const entries = [];
+  let offset = 0;
+  const localParts = [];
+  const now = new Date();
+  const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | Math.floor(now.getSeconds() / 2);
+  const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+  for (const [name, content] of Object.entries(fileMap)) {
+    const nameBytes = encoder.encode(name);
+    const data = encoder.encode(content);
+    const crc = crc32(data);
+    const header = new Uint8Array(30 + nameBytes.length);
+    const view = new DataView(header.buffer);
+    view.setUint32(0, 0x04034b50, true); view.setUint16(4, 20, true); view.setUint16(6, 0, true);
+    view.setUint16(8, 0, true); view.setUint16(10, dosTime, true); view.setUint16(12, dosDate, true);
+    view.setUint32(14, crc, true); view.setUint32(18, data.length, true); view.setUint32(22, data.length, true);
+    view.setUint16(26, nameBytes.length, true); view.setUint16(28, 0, true); header.set(nameBytes, 30);
+    localParts.push(header, data);
+    entries.push({ nameBytes, crc, size: data.length, offset });
+    offset += header.length + data.length;
+  }
+  const centralParts = [];
+  let centralSize = 0;
+  for (const entry of entries) {
+    const header = new Uint8Array(46 + entry.nameBytes.length);
+    const view = new DataView(header.buffer);
+    view.setUint32(0, 0x02014b50, true); view.setUint16(4, 20, true); view.setUint16(6, 20, true);
+    view.setUint16(8, 0, true); view.setUint16(10, 0, true); view.setUint16(12, dosTime, true); view.setUint16(14, dosDate, true);
+    view.setUint32(16, entry.crc, true); view.setUint32(20, entry.size, true); view.setUint32(24, entry.size, true);
+    view.setUint16(28, entry.nameBytes.length, true); view.setUint16(30, 0, true); view.setUint16(32, 0, true);
+    view.setUint16(34, 0, true); view.setUint16(36, 0, true); view.setUint32(38, 0, true); view.setUint32(42, entry.offset, true);
+    header.set(entry.nameBytes, 46); centralParts.push(header); centralSize += header.length;
+  }
+  const end = new Uint8Array(22);
+  const endView = new DataView(end.buffer);
+  endView.setUint32(0, 0x06054b50, true); endView.setUint16(4, 0, true); endView.setUint16(6, 0, true);
+  endView.setUint16(8, entries.length, true); endView.setUint16(10, entries.length, true);
+  endView.setUint32(12, centralSize, true); endView.setUint32(16, offset, true); endView.setUint16(20, 0, true);
+  return concatenateBytes([...localParts, ...centralParts, end]);
+}
+
+function concatenateBytes(parts) {
+  const length = parts.reduce((sum, part) => sum + part.length, 0);
+  const output = new Uint8Array(length);
+  let position = 0;
+  for (const part of parts) { output.set(part, position); position += part.length; }
+  return output;
+}
+
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  return (crc ^ 0xffffffff) >>> 0;
 }
 
 function canvasToBlob(canvas, quality) {
@@ -977,12 +1326,12 @@ document.addEventListener("visibilitychange", () => {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=0.8.0")
+    navigator.serviceWorker.register("service-worker.js?v=0.9.0")
       .then(registration => registration.update())
       .catch(() => {});
     navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (sessionStorage.getItem("live-object-frame-reloaded") === "0.8.0") return;
-      sessionStorage.setItem("live-object-frame-reloaded", "0.8.0");
+      if (sessionStorage.getItem("live-object-frame-reloaded") === "0.9.0") return;
+      sessionStorage.setItem("live-object-frame-reloaded", "0.9.0");
       window.location.reload();
     });
   });

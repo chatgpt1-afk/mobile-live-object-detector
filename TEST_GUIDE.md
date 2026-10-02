@@ -18,21 +18,17 @@ It measures the captured view's Horizontal × Vertical size. It does not infer a
 
 ## Test A — First verify it on the computer
 
-1. Extract the ZIP.
-2. Double-click `start_local_server.bat`.
-3. Open Chrome or Edge.
-4. Go to `http://localhost:8000`.
-5. Click **Open Camera** while the background is empty.
-6. Allow camera permission.
-7. With the scene still empty, click **Set Empty Background** and keep the phone still.
-8. Place one object and the marker in front of the saved background without moving the phone.
-9. Click **Detect Object**.
-10. Confirm the green frame contains the item and the cyan frame contains the 5 cm marker.
-11. Tap the round Camera icon beside the live view.
-12. Review the suggested frame. Choose **Use System Frame** or **Manual Frame**.
-13. In Manual Frame, drag inside the frame to move it and drag any handle to resize it. Test Undo, Redo and Reset.
-14. Tap **Confirm Frame & Measure**.
-15. Confirm the final image contains the frame, Horizontal cm and Vertical cm. The image downloads automatically.
+1. Extract the ZIP, run `start_local_server.bat`, then open `http://localhost:8000`.
+2. Enter a product barcode manually. On a supported phone browser, also test **Scan Barcode**.
+3. Click **Open Camera** while the background is empty and allow camera permission.
+4. With the scene still empty, click **Set Empty Background** and keep the phone still.
+5. Place one object and the marker in front of the saved background without moving the phone.
+6. Click **Detect Object** and confirm the green item frame and cyan 5 cm marker frame.
+7. Tap the round Camera icon, review the frame, and choose System or Manual Frame.
+8. In Manual Frame, test moving, resizing, Undo, Redo and Reset.
+9. Tap **Confirm Frame & Measure** and confirm the annotated image downloads automatically.
+10. Tap **Next Item**, test Save Record and Don't Save, then enter the next barcode.
+11. Open **History**, verify saved records, generate the `.xlsx` file and test Clear History.
 
 Do not double-click `index.html` directly. Camera access requires a web origin such as localhost or HTTPS.
 
