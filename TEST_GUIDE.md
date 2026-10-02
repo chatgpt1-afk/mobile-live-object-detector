@@ -27,8 +27,12 @@ It measures the captured view's Horizontal × Vertical size. It does not infer a
 7. Tap the round Camera icon, review the frame, and choose System or Manual Frame.
 8. In Manual Frame, test moving, resizing, Undo, Redo and Reset.
 9. Tap **Confirm Frame & Measure** and confirm the annotated image downloads automatically.
-10. Tap **Next Item**, test Save Record and Don't Save, then enter the next barcode.
-11. Open **History**, verify saved records, generate the `.xlsx` file and test Clear History.
+10. Test **Save Current Record** without leaving the result page.
+11. Measure another item, then tap **Detect New Object** directly and confirm the unsaved-record question appears.
+12. Measure another item, tap **History**, save the current record, and confirm History opens without forcing another barcode.
+13. Verify item-only thumbnails contain no green frame or measurement text.
+14. Generate the `.xlsx` and **Image Folder ZIP**. Confirm the generated-file notice and open/download link appear immediately.
+15. Test **Next Item**, Save Record, Don't Save and Clear History.
 
 Do not double-click `index.html` directly. Camera access requires a web origin such as localhost or HTTPS.
 

@@ -9,13 +9,13 @@
   <title>Live Object Frame</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=0.9.0">
+  <link rel="stylesheet" href="styles.css?v=0.10.0">
 </head>
 <body>
   <main class="app-shell">
     <header class="topbar">
       <div>
-        <p class="eyebrow">PHASE 2B · VERSION 0.9.0</p>
+        <p class="eyebrow">PHASE 2B · VERSION 0.10.0</p>
         <h1>Live Object Frame</h1>
       </div>
       <div class="header-actions">
@@ -97,6 +97,7 @@
       </div>
       <p class="measurement-note">This is a 2D Horizontal × Vertical measurement. After frame confirmation, the annotated image downloads automatically and its filename also contains H and V values. No third dimension is inferred.</p>
       <a id="downloadCapture" class="download-button fallback-download" download hidden>Download final image again</a>
+      <button id="saveCurrentRecordButton" type="button" hidden>Save Current Record</button>
       <button id="nextItemButton" class="primary next-item-button" type="button" hidden>Next Item</button>
     </section>
 
@@ -165,18 +166,24 @@
     </div>
     <div class="history-table-wrap">
       <table class="history-table">
-        <thead><tr><th>No.</th><th>Barcode</th><th>Horizontal (cm)</th><th>Vertical (cm)</th><th>Frame</th><th>Measured At</th></tr></thead>
+        <thead><tr><th>No.</th><th>Item Image</th><th>Barcode</th><th>Horizontal (cm)</th><th>Vertical (cm)</th><th>Frame</th><th>Measured At</th></tr></thead>
         <tbody id="historyTableBody"></tbody>
       </table>
       <p id="emptyHistory" class="dialog-message">No saved records yet.</p>
     </div>
+    <div id="exportNotice" class="export-notice" hidden>
+      <strong id="exportNoticeTitle"></strong>
+      <span id="exportNoticeFilename"></span>
+      <a id="exportFileLink" class="download-button" target="_blank">Open / Download Generated File</a>
+    </div>
     <div class="dialog-actions">
       <button id="clearHistoryButton" type="button">Clear History</button>
+      <button id="exportImagesButton" type="button">Generate Image Folder ZIP</button>
       <button id="exportHistoryButton" class="primary" type="button">Generate Excel</button>
     </div>
   </dialog>
 
   <canvas id="processingCanvas" hidden></canvas>
-  <script src="app.js?v=0.9.0" defer></script>
+  <script src="app.js?v=0.10.0" defer></script>
 </body>
 </html>

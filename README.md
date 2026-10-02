@@ -23,6 +23,9 @@ Free, dependency-free Mobile Web/PWA prototype for live camera object framing.
 - Next Item workflow with Save Record / Don't Save decision
 - Persistent on-device measurement history
 - Valid `.xlsx` measurement-history export and Clear History
+- Unsaved-record protection for Next Item, Detect New Object and History
+- Item-only image storage with History thumbnails and ZIP export
+- Immediate generated-file notice plus open/download action
 - Immediate pixel-size, camera-resolution and frame-coverage analysis
 - Automatic black-and-white printed 5 cm reference-marker detection
 - Marker and item analysis from the frozen high-resolution captured photo
