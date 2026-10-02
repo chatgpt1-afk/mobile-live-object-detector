@@ -20,7 +20,12 @@ const verticalSize = document.querySelector("#verticalSize");
 const referenceScale = document.querySelector("#referenceScale");
 const analysisStatus = document.querySelector("#analysisStatus");
 const analysisReason = document.querySelector("#analysisReason");
-const downloadCapture = document.querySelector("#downloadCapture");
+const homePage = document.querySelector("#homePage");
+const measurementPage = document.querySelector("#measurementPage");
+const startMeasurementButton = document.querySelector("#startMeasurementButton");
+const homeHistoryButton = document.querySelector("#homeHistoryButton");
+const homeHistoryCount = document.querySelector("#homeHistoryCount");
+const homeButton = document.querySelector("#homeButton");
 const frameEditorStage = document.querySelector("#frameEditorStage");
 const frameEditor = document.querySelector("#frameEditor");
 const frameEditorCtx = frameEditor.getContext("2d");
@@ -45,6 +50,11 @@ const saveRecordSummary = document.querySelector("#saveRecordSummary");
 const saveRecordButton = document.querySelector("#saveRecordButton");
 const skipSaveButton = document.querySelector("#skipSaveButton");
 const cancelNextItemButton = document.querySelector("#cancelNextItemButton");
+const duplicateBarcodeDialog = document.querySelector("#duplicateBarcodeDialog");
+const duplicateBarcodeMessage = document.querySelector("#duplicateBarcodeMessage");
+const replaceDuplicateButton = document.querySelector("#replaceDuplicateButton");
+const keepDuplicateButton = document.querySelector("#keepDuplicateButton");
+const cancelDuplicateButton = document.querySelector("#cancelDuplicateButton");
 const historyButton = document.querySelector("#historyButton");
 const historyCount = document.querySelector("#historyCount");
 const historyDialog = document.querySelector("#historyDialog");
@@ -85,7 +95,6 @@ let stableFrames = 0;
 let previousDetectionBox = null;
 let lastValidBox = null;
 let captureUrl = null;
-let capturedBlob = null;
 let capturedFilename = "object-capture.jpg";
 let detectionActive = false;
 let liveMarker = null;
@@ -105,6 +114,7 @@ let pendingRecordAction = null;
 let activeExportUrl = null;
 let barcodeStream = null;
 let barcodeScanRunning = false;
+let pendingBarcode = "";
 let measurementRecords = loadMeasurementRecords();
 
 thresholdInput.addEventListener("input", () => {
@@ -184,6 +194,9 @@ frameEditor.addEventListener("pointermove", moveFrameEdit);
 frameEditor.addEventListener("pointerup", endFrameEdit);
 frameEditor.addEventListener("pointercancel", endFrameEdit);
 barcodeForm.addEventListener("submit", acceptBarcode);
+startMeasurementButton.addEventListener("click", openBarcodeDialog);
+homeHistoryButton.addEventListener("click", openHistory);
+homeButton.addEventListener("click", () => requestRecordDecision("home"));
 scanBarcodeButton.addEventListener("click", startBarcodeScan);
 stopBarcodeScanButton.addEventListener("click", stopBarcodeScan);
 saveCurrentRecordButton.addEventListener("click", saveCurrentRecordWithoutLeaving);
@@ -196,9 +209,11 @@ closeHistoryButton.addEventListener("click", () => historyDialog.close());
 clearHistoryButton.addEventListener("click", clearMeasurementHistory);
 exportHistoryButton.addEventListener("click", exportMeasurementHistory);
 exportImagesButton.addEventListener("click", exportItemImages);
+replaceDuplicateButton.addEventListener("click", () => resolveDuplicateBarcode("replace"));
+keepDuplicateButton.addEventListener("click", () => resolveDuplicateBarcode("duplicate"));
+cancelDuplicateButton.addEventListener("click", () => resolveDuplicateBarcode("cancel"));
 
 updateHistoryCount();
-queueMicrotask(() => openBarcodeDialog());
 
 barcodeDialog.addEventListener("cancel", event => event.preventDefault());
 
@@ -217,11 +232,25 @@ function acceptBarcode(event) {
     barcodeMessage.textContent = "Barcode is required before measuring the product.";
     return;
   }
+  const duplicateCount = measurementRecords.filter(record => record.barcode === value).length;
+  if (duplicateCount) {
+    pendingBarcode = value;
+    duplicateBarcodeMessage.textContent = `${value} already has ${duplicateCount} saved record${duplicateCount === 1 ? "" : "s"}. Replace removes the old record(s); Keep Duplicate adds another.`;
+    barcodeDialog.close();
+    duplicateBarcodeDialog.showModal();
+    return;
+  }
+  useBarcode(value);
+}
+
+function useBarcode(value) {
   currentBarcode = value;
   currentMeasurement = null;
   currentItemImageBlob = null;
   stopBarcodeScan();
-  barcodeDialog.close();
+  if (barcodeDialog.open) barcodeDialog.close();
+  homePage.hidden = true;
+  measurementPage.hidden = false;
   captureResult.hidden = true;
   nextItemButton.hidden = true;
   saveCurrentRecordButton.hidden = true;
@@ -236,6 +265,32 @@ function acceptBarcode(event) {
     detectionStatus.textContent = "Barcode ready";
     liveMessage.textContent = `Barcode ${currentBarcode}: tap Open Camera to begin`;
   }
+}
+
+async function resolveDuplicateBarcode(action) {
+  duplicateBarcodeDialog.close();
+  if (action === "cancel") {
+    pendingBarcode = "";
+    openBarcodeDialog();
+    return;
+  }
+  if (action === "replace") {
+    const removed = measurementRecords.filter(record => record.barcode === pendingBarcode);
+    await Promise.allSettled(removed.filter(record => record.imageId).map(record => deleteItemImage(record.imageId)));
+    measurementRecords = measurementRecords.filter(record => record.barcode !== pendingBarcode);
+    localStorage.setItem("object-measurement-records-v1", JSON.stringify(measurementRecords));
+    updateHistoryCount();
+  }
+  const value = pendingBarcode;
+  pendingBarcode = "";
+  useBarcode(value);
+}
+
+function showHome() {
+  stopCamera();
+  captureResult.hidden = true;
+  measurementPage.hidden = true;
+  homePage.hidden = false;
 }
 
 async function startBarcodeScan() {
@@ -629,7 +684,6 @@ async function captureCurrentObject() {
   manualFrameEnabled = false;
   frameEditorStage.hidden = false;
   capturedPreview.hidden = true;
-  downloadCapture.hidden = true;
   useSystemFrameButton.classList.add("active");
   manualFrameButton.classList.remove("active");
   updateFrameHistoryButtons();
@@ -826,7 +880,7 @@ async function confirmFrameAndMeasure() {
   const pixelsPerCm = ((capturedMarker.width + capturedMarker.height) / 2) / 5;
   const horizontalCm = editableFrame.width / pixelsPerCm;
   const verticalCm = editableFrame.height / pixelsPerCm;
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const date = new Date().toISOString().slice(0, 10);
   const safeBarcode = currentBarcode.replace(/[^a-z0-9_-]+/gi, "-").slice(0, 48) || "unknown";
   const itemCanvas = document.createElement("canvas");
   itemCanvas.width = Math.max(1, Math.round(editableFrame.width));
@@ -837,7 +891,8 @@ async function confirmFrameAndMeasure() {
     0, 0, itemCanvas.width, itemCanvas.height
   );
   currentItemImageBlob = await canvasToBlob(itemCanvas, 0.94);
-  const itemImageFilename = `${safeBarcode}-${stamp}.jpg`;
+  const measurementFilename = `${safeBarcode}_H-${horizontalCm.toFixed(2)}cm_V-${verticalCm.toFixed(2)}cm_${date}.jpg`;
+  const itemImageFilename = measurementFilename;
   const output = document.createElement("canvas");
   output.width = capturedFullCanvas.width;
   output.height = capturedFullCanvas.height;
@@ -867,10 +922,10 @@ async function confirmFrameAndMeasure() {
   ctx.fillText(lines[1], labelX + padding, labelY + fontSize * 2.15);
   ctx.fillText(lines[2], labelX + padding, labelY + fontSize * 3.25);
 
-  capturedBlob = await canvasToBlob(output, 0.94);
+  const capturedBlob = await canvasToBlob(output, 0.94);
   if (captureUrl) URL.revokeObjectURL(captureUrl);
   captureUrl = URL.createObjectURL(capturedBlob);
-  capturedFilename = `${safeBarcode}_H-${horizontalCm.toFixed(2)}cm_V-${verticalCm.toFixed(2)}cm-${stamp}.jpg`;
+  capturedFilename = measurementFilename;
   capturedPreview.src = captureUrl;
   capturedPreview.hidden = false;
   frameEditorStage.hidden = true;
@@ -879,9 +934,6 @@ async function confirmFrameAndMeasure() {
   referenceScale.textContent = `${pixelsPerCm.toFixed(2)} px/cm`;
   analysisStatus.textContent = "MEASURED";
   analysisReason.textContent = manualFrameEnabled ? "Manual frame confirmed" : "System frame confirmed";
-  downloadCapture.href = captureUrl;
-  downloadCapture.download = capturedFilename;
-  downloadCapture.hidden = false;
   currentMeasurement = {
     barcode: currentBarcode,
     horizontalCm: Number(horizontalCm.toFixed(2)),
@@ -896,17 +948,28 @@ async function confirmFrameAndMeasure() {
   saveCurrentRecordButton.disabled = false;
   saveCurrentRecordButton.textContent = "Save Current Record";
   nextItemButton.hidden = false;
-  downloadCapture.click();
+  downloadBlob(capturedBlob, capturedFilename);
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function requestRecordDecision(action) {
   if (!currentMeasurement) {
     if (action === "history") openHistory();
+    else if (action === "home") showHome();
     else prepareForNextBarcode();
     return;
   }
   if (currentMeasurement.saved) {
     if (action === "history") openHistory();
+    else if (action === "home") showHome();
     else prepareForNextBarcode();
     return;
   }
@@ -930,6 +993,10 @@ async function finishRecordDecision(shouldSave) {
   saveRecordDialog.close();
   if (action === "history") {
     openHistory();
+    return;
+  }
+  if (action === "home") {
+    showHome();
     return;
   }
   prepareForNextBarcode();
@@ -991,6 +1058,7 @@ function loadMeasurementRecords() {
 
 function updateHistoryCount() {
   historyCount.textContent = String(measurementRecords.length);
+  homeHistoryCount.textContent = String(measurementRecords.length);
 }
 
 function openHistory() {
@@ -1057,17 +1125,16 @@ async function clearMeasurementHistory() {
   renderHistory();
 }
 
-function exportMeasurementHistory() {
+async function exportMeasurementHistory() {
   if (!measurementRecords.length) return;
   const blob = buildMeasurementWorkbook(measurementRecords);
   const filename = `object-measurement-history-${new Date().toISOString().slice(0, 10)}.xlsx`;
-  presentGeneratedFile(blob, filename, "Excel generated successfully");
+  await shareGeneratedFile(blob, filename, "Measurement Excel");
 }
 
 async function exportItemImages() {
-  const previewWindow = window.open("about:blank", "_blank");
   const imageRecords = await getAllItemImages();
-  if (!imageRecords.length) { previewWindow?.close(); return; }
+  if (!imageRecords.length) return;
   const files = {};
   const usedNames = new Set();
   for (const image of imageRecords) {
@@ -1082,19 +1149,28 @@ async function exportItemImages() {
   }
   const blob = new Blob([createStoredZip(files)], { type: "application/zip" });
   const filename = `item-images-${new Date().toISOString().slice(0, 10)}.zip`;
-  presentGeneratedFile(blob, filename, "Image folder ZIP generated successfully", previewWindow);
+  await shareGeneratedFile(blob, filename, "Item image folder");
 }
 
-function presentGeneratedFile(blob, filename, title, previewWindow = null) {
+async function shareGeneratedFile(blob, filename, title) {
+  const file = new File([blob], filename, { type: blob.type });
+  if (navigator.share && navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title });
+      exportNotice.hidden = true;
+      return;
+    } catch (error) {
+      if (error.name === "AbortError") return;
+    }
+  }
   if (activeExportUrl) URL.revokeObjectURL(activeExportUrl);
   activeExportUrl = URL.createObjectURL(blob);
-  exportNoticeTitle.textContent = title;
-  exportNoticeFilename.textContent = filename;
+  exportNoticeTitle.textContent = "Share is unavailable in this browser";
+  exportNoticeFilename.textContent = `Download ${filename}, then share it from your Files app.`;
   exportFileLink.href = activeExportUrl;
   exportFileLink.download = filename;
+  exportFileLink.hidden = false;
   exportNotice.hidden = false;
-  if (previewWindow) previewWindow.location.href = activeExportUrl;
-  else window.open(activeExportUrl, "_blank");
 }
 
 function openImageDatabase() {
@@ -1133,6 +1209,16 @@ async function getAllItemImages() {
     const request = database.transaction("images", "readonly").objectStore("images").getAll();
     request.onsuccess = () => { database.close(); resolve(request.result || []); };
     request.onerror = () => { database.close(); reject(request.error); };
+  });
+}
+
+async function deleteItemImage(id) {
+  const database = await openImageDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction("images", "readwrite");
+    transaction.objectStore("images").delete(id);
+    transaction.oncomplete = () => { database.close(); resolve(); };
+    transaction.onerror = () => { database.close(); reject(transaction.error); };
   });
 }
 
@@ -1501,12 +1587,12 @@ document.addEventListener("visibilitychange", () => {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=0.10.0")
+    navigator.serviceWorker.register("service-worker.js?v=0.11.0")
       .then(registration => registration.update())
       .catch(() => {});
     navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (sessionStorage.getItem("live-object-frame-reloaded") === "0.10.0") return;
-      sessionStorage.setItem("live-object-frame-reloaded", "0.10.0");
+      if (sessionStorage.getItem("live-object-frame-reloaded") === "0.11.0") return;
+      sessionStorage.setItem("live-object-frame-reloaded", "0.11.0");
       window.location.reload();
     });
   });

@@ -9,16 +9,25 @@
   <title>Live Object Frame</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=0.10.0">
+  <link rel="stylesheet" href="styles.css?v=0.11.0">
 </head>
 <body>
-  <main class="app-shell">
+  <main id="homePage" class="home-page">
+    <p class="eyebrow">OBJECT MEASUREMENT · VERSION 0.11.0</p>
+    <h1>Measure products with your phone</h1>
+    <p>Frame one product with the printed 5 cm marker, confirm the object frame, then save the measurement.</p>
+    <button id="startMeasurementButton" class="primary" type="button">Start Measurement</button>
+    <button id="homeHistoryButton" type="button">View History <span id="homeHistoryCount">0</span></button>
+  </main>
+
+  <main id="measurementPage" class="app-shell" hidden>
     <header class="topbar">
       <div>
-        <p class="eyebrow">PHASE 2B · VERSION 0.10.0</p>
+        <p class="eyebrow">PHASE 2B · VERSION 0.11.0</p>
         <h1>Live Object Frame</h1>
       </div>
       <div class="header-actions">
+        <button id="homeButton" class="compact" type="button">Home</button>
         <button id="historyButton" class="compact" type="button">History <span id="historyCount">0</span></button>
         <span id="cameraState" class="pill idle">Camera off</span>
       </div>
@@ -39,6 +48,12 @@
       </button>
     </section>
 
+    <section class="controls">
+      <button id="startButton" class="primary" type="button">Open Camera</button>
+      <button id="calibrateButton" type="button" disabled>Set Empty Background</button>
+      <button id="detectButton" type="button" disabled>Detect Object</button>
+    </section>
+
     <section class="status-card" aria-live="polite">
       <div>
         <span class="label">Detection</span>
@@ -56,12 +71,6 @@
         <span class="label">B&amp;W 5 cm Marker</span>
         <strong id="markerStatus">Checked after Capture</strong>
       </div>
-    </section>
-
-    <section class="controls">
-      <button id="startButton" class="primary" type="button">Open Camera</button>
-      <button id="calibrateButton" type="button" disabled>Set Empty Background</button>
-      <button id="detectButton" type="button" disabled>Detect Object</button>
     </section>
 
     <section id="captureResult" class="capture-result" hidden>
@@ -96,7 +105,6 @@
         <div><span>Frame coverage</span><strong id="frameCoverage">—</strong></div>
       </div>
       <p class="measurement-note">This is a 2D Horizontal × Vertical measurement. After frame confirmation, the annotated image downloads automatically and its filename also contains H and V values. No third dimension is inferred.</p>
-      <a id="downloadCapture" class="download-button fallback-download" download hidden>Download final image again</a>
       <button id="saveCurrentRecordButton" type="button" hidden>Save Current Record</button>
       <button id="nextItemButton" class="primary next-item-button" type="button" hidden>Next Item</button>
     </section>
@@ -126,6 +134,8 @@
         <li>If the live item frame does not appear, Capture is still available and the photo will be analysed after shooting.</li>
         <li>Tap the round Camera icon.</li>
         <li>The captured photo is then analysed for the marker and item separately.</li>
+        <li><b>Foreground sensitivity:</b> lower it when a pale/low-contrast item is not detected; raise it when shadows or background are included in the frame.</li>
+        <li><b>Minimum object size:</b> lower it for a small product that is ignored; raise it when tiny background marks are framed as the product.</li>
       </ol>
     </section>
   </main>
@@ -146,6 +156,17 @@
         <button class="primary" type="submit">Continue</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="duplicateBarcodeDialog" class="app-dialog">
+    <p class="eyebrow">DUPLICATE BARCODE</p>
+    <h2>This barcode already exists</h2>
+    <p id="duplicateBarcodeMessage" class="dialog-message"></p>
+    <div class="dialog-actions three-actions">
+      <button id="cancelDuplicateButton" type="button">Cancel</button>
+      <button id="keepDuplicateButton" type="button">Keep Duplicate</button>
+      <button id="replaceDuplicateButton" class="primary" type="button">Replace</button>
+    </div>
   </dialog>
 
   <dialog id="saveRecordDialog" class="app-dialog">
@@ -174,7 +195,7 @@
     <div id="exportNotice" class="export-notice" hidden>
       <strong id="exportNoticeTitle"></strong>
       <span id="exportNoticeFilename"></span>
-      <a id="exportFileLink" class="download-button" target="_blank">Open / Download Generated File</a>
+      <a id="exportFileLink" class="download-button" download hidden>Download File</a>
     </div>
     <div class="dialog-actions">
       <button id="clearHistoryButton" type="button">Clear History</button>
@@ -184,6 +205,6 @@
   </dialog>
 
   <canvas id="processingCanvas" hidden></canvas>
-  <script src="app.js?v=0.10.0" defer></script>
+  <script src="app.js?v=0.11.0" defer></script>
 </body>
 </html>

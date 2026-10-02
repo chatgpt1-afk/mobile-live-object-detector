@@ -19,11 +19,15 @@ body {
 
 button, input { font: inherit; }
 
-.app-shell {
+.app-shell, .home-page {
   width: min(100%, 760px);
   margin: 0 auto;
   padding: max(18px, env(safe-area-inset-top)) 14px max(28px, env(safe-area-inset-bottom));
 }
+.home-page { min-height: 100vh; display: grid; align-content: center; gap: 14px; text-align: center; }
+.home-page[hidden] { display: none; }
+.home-page h1, .home-page p { margin: 0; }
+.home-page > button { width: 100%; }
 
 .topbar, .status-card, .controls { display: flex; }
 .topbar { align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
@@ -104,6 +108,7 @@ h1 { margin: 0; font-size: clamp(1.35rem, 5vw, 2rem); }
   gap: 8px;
   margin: 12px 0;
 }
+.controls { margin: 12px 0; }
 .status-card > div {
   flex: 1;
   min-width: 0;

@@ -20,12 +20,14 @@ Free, dependency-free Mobile Web/PWA prototype for live camera object framing.
 - Final image annotation with Horizontal and Vertical centimetres
 - Automatic final-image download with H/V values in the filename
 - Manual barcode entry and supported-browser camera barcode scanning
+- Home page before barcode entry
+- Duplicate barcode Replace / Keep Duplicate / Cancel choice
 - Next Item workflow with Save Record / Don't Save decision
 - Persistent on-device measurement history
 - Valid `.xlsx` measurement-history export and Clear History
 - Unsaved-record protection for Next Item, Detect New Object and History
 - Item-only image storage with History thumbnails and ZIP export
-- Immediate generated-file notice plus open/download action
+- Excel and image ZIP export through the phone Share Sheet, with download fallback
 - Immediate pixel-size, camera-resolution and frame-coverage analysis
 - Automatic black-and-white printed 5 cm reference-marker detection
 - Marker and item analysis from the frozen high-resolution captured photo
