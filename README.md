@@ -1,48 +1,23 @@
-# Mobile Live Object Detector — Phase 1
+# Tabletop Product Measure — independent v1.0.0
 
-Free, dependency-free Mobile Web/PWA prototype for live camera object framing.
+Start with GUIDE.html (中文操作指南). The original v0.11.0 application is unchanged.
 
-## Included
+- PC: open index.html, or run start_local_server.bat (Windows PowerShell, no Python).
+- Phone camera: host the extracted static files in a NEW HTTPS site. See GUIDE.html.
+- Print reference-15x10cm.pdf at Actual Size/100%; verify OUTSIDE edges with a ruler.
+- All records are Review Required. No real-device accuracy certification or shelf-fit guarantee.
+- Outputs: cropped image ZIP, real XLSX workbook, full JSON backup. No third-party CDNs.
+- No backend, account or photo upload. Records persist in this browser's IndexedDB.
+- Camera scanning requires native BarcodeDetector support; manual barcode always available.
+- Camera relocation invalidates calibration/background; photo upload keeps the selected action workflow.
+- Core assumptions: perpendicular camera, approximately central principal point, known flat desk,
+  correct distance/thickness bounds, calibrated plane mapping, full object outline in the frame,
+  object axes aligned with the reference. Lens distortion is NOT calibrated.
 
-- Rear-camera request on supported phones
-- Live foreground detection
-- Smoothed bounding box that follows the detected object
-- Edge warning when an object may be cut off
-- Manual averaged empty-background calibration using Set Empty Background
-- Automatic compensation for normal small hand-held camera shifts
-- Separate live item frame and stable 5 cm marker frame
-- Shadow suppression and small-item detection down to 0.1% of the frame
-- Adjustable sensitivity and minimum object size
-- Stable-frame Capture button
-- High-resolution photo capture and automatic object crop
-- System-frame review or full manual frame editing before measurement
-- Move, eight resize handles, Undo, Redo and Reset controls
-- Final image annotation with Horizontal and Vertical centimetres
-- Automatic final-image download with H/V values in the filename
-- Manual barcode entry and supported-browser camera barcode scanning
-- Home page before barcode entry
-- Duplicate barcode Replace / Keep Duplicate / Cancel choice
-- Next Item workflow with Save Record / Don't Save decision
-- Persistent on-device measurement history
-- Valid `.xlsx` measurement-history export and Clear History
-- Unsaved-record protection for Next Item, Detect New Object and History
-- Item-only image storage with History thumbnails and ZIP export
-- Excel and image ZIP export through the phone Share Sheet, with download fallback
-- Immediate pixel-size, camera-resolution and frame-coverage analysis
-- Automatic black-and-white printed 5 cm reference-marker detection
-- Marker and item analysis from the frozen high-resolution captured photo
-- 2D Horizontal × Vertical centimetre measurement
-- Browser-safe automatic download after frame confirmation
-- Simplified Open Camera → Detect Object → Capture flow
-- Floating Camera capture icon inside the live-view area
-- Offline PWA cache after the first successful HTTPS visit
+## Source layout
+index.html/styles.css: UI; app.js: camera/edit/history; core.js: geometry/detection;
+exports.js: XLSX/ZIP; GUIDE.html: guide; reference.html/PDF: calibration;
+start_server.ps1/start_local_server.bat: local PC server; tests/core.test.cjs: regression tests.
 
-## Not included in Phase 1
-
-- Width / Length / Height calculation
-- ArUco measurement
-- Front / Side / Top photo mapping
-- Product classification
-- Third-dimension measurement from a single 2D view
-
-See `TEST_GUIDE.md` for step-by-step testing.
+Run mathematical tests (developer only): node tests/core.test.cjs
+See TEST_RESULTS.md for what was actually tested and what was not.
