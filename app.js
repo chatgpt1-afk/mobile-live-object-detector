@@ -80,43 +80,6 @@ const markerStatus = document.querySelector("#markerStatus");
 const liveMessage = document.querySelector("#liveMessage");
 const emptyState = document.querySelector("#emptyState");
 
-
-const referenceSizeSelect = document.querySelector('#referenceSize');
-const referenceDownload = document.querySelector('#referenceDownload');
-const placementHint = document.querySelector('#placementHint');
-const tapFocusIndicator = document.querySelector('#tapFocusIndicator');
-const MARKER_ON_ITEM = true;
-let markerSizeCm = 5;
-referenceSizeSelect.addEventListener('change', () => {
-  markerSizeCm = Number(referenceSizeSelect.value);
-  referenceDownload.href = `reference/${markerSizeCm}cm_reference_marker.pdf`;
-  liveMarker = null; capturedMarker = null;
-  markerStatus.textContent = 'Recheck marker after size change';
-  if (capturedFullCanvas) {
-    const ctx = capturedFullCanvas.getContext('2d', {willReadFrequently:true});
-    const image = ctx.getImageData(0,0,capturedFullCanvas.width,capturedFullCanvas.height);
-    capturedMarker = detectReferenceMarker(image.data,image.width,image.height);
-    referenceScale.textContent = capturedMarker ? `${(((capturedMarker.width+capturedMarker.height)/2)/markerSizeCm).toFixed(2)} px/cm` : '—';
-  }
-});
-placementHint.textContent = MARKER_ON_ITEM
-  ? 'Version A: place marker flat on item top; marker may overlap item frame. Measure the same top plane.'
-  : 'Version B: place marker beside the item, facing the camera, at the same depth as the measured face.';
-video.addEventListener('pointerdown', async event => {
-  if (!running || !stream) return;
-  const rect = video.getBoundingClientRect();
-  tapFocusIndicator.hidden = false;
-  tapFocusIndicator.style.left = `${event.clientX - rect.left + video.offsetLeft}px`;
-  tapFocusIndicator.style.top = `${event.clientY - rect.top + video.offsetTop}px`;
-  const track = stream.getVideoTracks()[0];
-  try {
-    const caps = track.getCapabilities?.() || {};
-    if (caps.focusMode?.includes('single-shot')) await track.applyConstraints({advanced:[{focusMode:'single-shot'}]});
-    else if (caps.focusMode?.includes('continuous')) await track.applyConstraints({advanced:[{focusMode:'continuous'}]});
-  } catch (error) { /* Browser may not support focus controls; auto-focus remains active. */ }
-  setTimeout(() => { tapFocusIndicator.hidden = true; }, 900);
-});
-
 const PROCESS_WIDTH = 320;
 const PROCESS_INTERVAL_MS = 80;
 const SMOOTHING = 0.32;
@@ -215,7 +178,7 @@ function beginDetection() {
   captureButton.disabled = false;
   detectButton.textContent = "Detecting…";
   detectionStatus.textContent = "Looking for item and marker";
-  liveMessage.textContent = "Green frame = item; cyan frame = reference marker";
+  liveMessage.textContent = "Green frame = item; cyan frame = 5 cm marker";
 }
 
 captureButton.addEventListener("click", captureCurrentObject);
@@ -530,7 +493,7 @@ function processFrame() {
   const mask = maskFromSavedBackground(
     frame.data, backgroundFrame, width, height, threshold, alignment.dx, alignment.dy
   );
-  if (liveMarker && !MARKER_ON_ITEM) {
+  if (liveMarker) {
     const margin = Math.max(4, Math.round(Math.max(liveMarker.width, liveMarker.height) * 0.25));
     clearMaskRegion(mask, width, height, liveMarker, margin);
   }
@@ -681,7 +644,7 @@ async function captureCurrentObject() {
     smallFrame.data, backgroundFrame, analysisCanvas.width, analysisCanvas.height,
     Number(thresholdInput.value), alignment.dx, alignment.dy
   );
-  if (capturedMarker && !MARKER_ON_ITEM) {
+  if (capturedMarker) {
     const markerOnAnalysis = {
       x: capturedMarker.x * analysisCanvas.width / full.width,
       y: capturedMarker.y * analysisCanvas.height / full.height,
@@ -735,7 +698,7 @@ async function captureCurrentObject() {
   horizontalSize.textContent = "Pending frame confirmation";
   verticalSize.textContent = "Pending frame confirmation";
   referenceScale.textContent = capturedMarker
-    ? `${(((capturedMarker.width + capturedMarker.height) / 2) / markerSizeCm).toFixed(2)} px/cm`
+    ? `${(((capturedMarker.width + capturedMarker.height) / 2) / 5).toFixed(2)} px/cm`
     : "—";
   captureResult.hidden = false;
   captureResult.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -911,10 +874,10 @@ async function confirmFrameAndMeasure() {
   if (!capturedFullCanvas || !editableFrame) return;
   if (!capturedMarker) {
     analysisStatus.textContent = "REVIEW REQUIRED";
-    analysisReason.textContent = "Selected reference marker was not detected; measurement was not guessed";
+    analysisReason.textContent = "5 cm reference marker was not detected; measurement was not guessed";
     return;
   }
-  const pixelsPerCm = ((capturedMarker.width + capturedMarker.height) / 2) / markerSizeCm;
+  const pixelsPerCm = ((capturedMarker.width + capturedMarker.height) / 2) / 5;
   const horizontalCm = editableFrame.width / pixelsPerCm;
   const verticalCm = editableFrame.height / pixelsPerCm;
   const date = new Date().toISOString().slice(0, 10);

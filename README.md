@@ -1,13 +1,48 @@
-# Mobile Detector 0.12.1 — on-item
+# Mobile Live Object Detector — Phase 1
 
-This is an independent variant of the existing v0.11.0 application.
+Free, dependency-free Mobile Web/PWA prototype for live camera object framing.
 
-- Tap live camera to request focus (browser/device support varies).
-- Select 5, 10 or 15 cm reference marker; print the matching PDF at 100% actual size.
-- The black outer square is the specified physical dimension.
-- Place marker flat on top of the item; it can be inside the manual frame.
-- Capture, manually adjust frame, confirm measurement.
-- The system measures image-plane horizontal/vertical extents, NOT independently verified 3D dimensions.
-- Use only when reference and measured face are parallel and at the same camera distance.
-- Marker detection uses the original contrast/pattern detector; real-device tests are required.
-- Deploy files to a separate GitHub Pages branch/folder or replace files after backup; use ?v=0.12.1 to bypass page caching.
+## Included
+
+- Rear-camera request on supported phones
+- Live foreground detection
+- Smoothed bounding box that follows the detected object
+- Edge warning when an object may be cut off
+- Manual averaged empty-background calibration using Set Empty Background
+- Automatic compensation for normal small hand-held camera shifts
+- Separate live item frame and stable 5 cm marker frame
+- Shadow suppression and small-item detection down to 0.1% of the frame
+- Adjustable sensitivity and minimum object size
+- Stable-frame Capture button
+- High-resolution photo capture and automatic object crop
+- System-frame review or full manual frame editing before measurement
+- Move, eight resize handles, Undo, Redo and Reset controls
+- Final image annotation with Horizontal and Vertical centimetres
+- Automatic final-image download with H/V values in the filename
+- Manual barcode entry and supported-browser camera barcode scanning
+- Home page before barcode entry
+- Duplicate barcode Replace / Keep Duplicate / Cancel choice
+- Next Item workflow with Save Record / Don't Save decision
+- Persistent on-device measurement history
+- Valid `.xlsx` measurement-history export and Clear History
+- Unsaved-record protection for Next Item, Detect New Object and History
+- Item-only image storage with History thumbnails and ZIP export
+- Excel and image ZIP export through the phone Share Sheet, with download fallback
+- Immediate pixel-size, camera-resolution and frame-coverage analysis
+- Automatic black-and-white printed 5 cm reference-marker detection
+- Marker and item analysis from the frozen high-resolution captured photo
+- 2D Horizontal × Vertical centimetre measurement
+- Browser-safe automatic download after frame confirmation
+- Simplified Open Camera → Detect Object → Capture flow
+- Floating Camera capture icon inside the live-view area
+- Offline PWA cache after the first successful HTTPS visit
+
+## Not included in Phase 1
+
+- Width / Length / Height calculation
+- ArUco measurement
+- Front / Side / Top photo mapping
+- Product classification
+- Third-dimension measurement from a single 2D view
+
+See `TEST_GUIDE.md` for step-by-step testing.
