@@ -1,12 +1,14 @@
-const CACHE_NAME = "live-object-frame-v15";
+const CACHE_NAME = "live-object-frame-0.12.1";
 const APP_FILES = [
   "./",
   "index.html",
-  "styles.css?v=0.12.0",
-  "app.js?v=0.12.0",
+  "styles.css?v=0.12.1",
+  "app.js?v=0.12.1",
   "manifest.webmanifest",
   "icon.svg",
-  "reference/20cm_reference_marker.pdf"
+  "reference/5cm_reference_marker.pdf",
+  "reference/10cm_reference_marker.pdf",
+  "reference/15cm_reference_marker.pdf"
 ];
 
 self.addEventListener("install", event => {

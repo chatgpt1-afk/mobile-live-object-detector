@@ -9,13 +9,13 @@
   <title>Live Object Frame</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=0.12.0">
+  <link rel="stylesheet" href="styles.css?v=0.12.1">
 </head>
 <body>
   <main id="homePage" class="home-page">
-    <p class="eyebrow">OBJECT MEASUREMENT · VERSION 0.12.0</p>
+    <p class="eyebrow">OBJECT MEASUREMENT · VERSION 0.11.0</p>
     <h1>Measure products with your phone</h1>
-    <p>Fix your phone above the table. Calibrate once with the 20 × 20 cm reference, then measure each product.</p>
+    <p>Frame one product with the printed reference marker, confirm the object frame, then save the measurement.</p>
     <button id="startMeasurementButton" class="primary" type="button">Start Measurement</button>
     <button id="homeHistoryButton" type="button">View History <span id="homeHistoryCount">0</span></button>
   </main>
@@ -23,7 +23,7 @@
   <main id="measurementPage" class="app-shell" hidden>
     <header class="topbar">
       <div>
-        <p class="eyebrow">PHASE 2B · VERSION 0.12.0</p>
+        <p class="eyebrow">PHASE 2B · VERSION 0.11.0</p>
         <h1>Live Object Frame</h1>
       </div>
       <div class="header-actions">
@@ -41,7 +41,7 @@
         <strong>Camera is not running</strong>
         <span>Tap Open Camera to begin.</span>
       </div>
-      <div class="safe-guide" aria-hidden="true"></div>
+      <div id="tapFocusIndicator" class="tap-focus-indicator" hidden></div><div class="safe-guide" aria-hidden="true"></div>
       <div id="liveMessage" class="live-message">Place one item near the centre</div>
       <button id="captureButton" class="capture-fab" type="button" aria-label="Capture object" title="Capture object" disabled>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 10.4 2h3.2L15 4h3.5A3.5 3.5 0 0 1 22 7.5v10a3.5 3.5 0 0 1-3.5 3.5h-13A3.5 3.5 0 0 1 2 17.5v-10A3.5 3.5 0 0 1 5.5 4H9Zm3 4a5 5 0 1 0 0 10 5 5 0 0 0 0-10Zm0 2.2a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6Z"/></svg>
@@ -52,14 +52,9 @@
       <button id="startButton" class="primary" type="button">Open Camera</button>
       <button id="calibrateButton" type="button" disabled>Set Empty Background</button>
       <button id="detectButton" type="button" disabled>Detect Object</button>
-      <button id="cameraSetupButton" type="button">Camera Setup · 拍摄设置</button>
     </section>
 
-    <section class="item-settings">
-      <label class="dialog-field"><span>Maximum item thickness · 物品最厚处 (cm)</span><input id="itemThickness" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Enter for each product" required></label>
-      <p id="setupSummary" class="measurement-note">Camera setup required</p>
-    </section>
-
+    <div class="reference-picker"><label for="referenceSize">Reference Paper Size</label><select id="referenceSize"><option value="5">5 × 5 cm</option><option value="10">10 × 10 cm</option><option value="15">15 × 15 cm</option></select><a id="referenceDownload" href="reference/5cm_reference_marker.pdf" target="_blank" rel="noopener">Print selected marker (PDF)</a><small id="placementHint"></small></div>
     <section class="status-card" aria-live="polite">
       <div>
         <span class="label">Detection</span>
@@ -74,8 +69,8 @@
         <strong id="fps">—</strong>
       </div>
       <div>
-        <span class="label">20 × 20 cm Reference</span>
-        <strong id="markerStatus">Setup required</strong>
+        <span class="label">B&amp;W Reference Marker</span>
+        <strong id="markerStatus">Checked after Capture</strong>
       </div>
     </section>
 
@@ -105,14 +100,12 @@
         <div><span>Reason</span><strong id="analysisReason">—</strong></div>
         <div><span>Horizontal size</span><strong id="horizontalSize">—</strong></div>
         <div><span>Vertical size</span><strong id="verticalSize">—</strong></div>
-        <div><span>Thickness-corrected estimate</span><strong id="correctedSize">—</strong></div>
-        <div><span>Maximum thickness (entered)</span><strong id="thicknessSize">—</strong></div>
         <div><span>Reference scale</span><strong id="referenceScale">—</strong></div>
         <div><span>Object pixels</span><strong id="pixelSize">—</strong></div>
         <div><span>Camera image</span><strong id="imageSize">—</strong></div>
         <div><span>Frame coverage</span><strong id="frameCoverage">—</strong></div>
       </div>
-      <p class="measurement-note">H × V are conservative shelf-planning dimensions (envelope over 0–maximum thickness + 5%, rounded up). The smaller thickness-corrected estimate assumes every boundary is at maximum thickness. Different boundary heights can make that estimate too small. Thickness is entered, not camera-measured; verify fit-critical products with a ruler.</p>
+      <p class="measurement-note">This is a 2D Horizontal × Vertical measurement. After frame confirmation, the annotated image downloads automatically and its filename also contains H and V values. No third dimension is inferred.</p>
       <button id="saveCurrentRecordButton" type="button" hidden>Save Current Record</button>
       <button id="nextItemButton" class="primary next-item-button" type="button" hidden>Next Item</button>
     </section>
@@ -132,35 +125,21 @@
     </details>
 
     <section class="instructions">
-      <h2>Quick guide · 简单操作</h2>
+      <h2>First test</h2>
       <ol>
-        <li>Print <a href="reference/20cm_reference_marker.pdf" target="_blank" rel="noopener">20 × 20 cm reference</a> at <b>100% / Actual Size</b>. Check both black outer edges with a ruler: 20 cm each.</li>
-        <li>Fix the phone horizontally above the table, rear lens facing straight down. Measure <b>rear camera lens to table</b>, not phone body to table.</li>
-        <li>Start Measurement → scan/type barcode → Camera Setup: enter distance and first item thickness.</li>
-        <li>Put only the reference flat in the centre of the table, align its sides with the screen, Open Camera, then Detect Reference Paper → Use Setup.</li>
-        <li>Remove the reference and product; tap <b>Set Empty Background</b> once. Place the product near the centre; enter its maximum thickness → Detect Object → Capture → confirm the whole frame.</li>
-        <li>Next Item / Detect New Object → barcode only. Enter the new item's thickness on this page; distance and reference scale stay the same.</li>
-        <li>After moving the stand, changing zoom/lens, or reopening the camera, use <b>Camera Setup</b> to recalibrate and save a fresh empty background. No zoom during measuring.</li>
-        <li><b>Foreground sensitivity:</b> lower for pale missed items; raise when shadows are framed. <b>Minimum object size:</b> lower for small items; raise for background specks.</li>
+        <li>Print the selected black-and-white marker at 100% / Actual Size.</li>
+        <li>Tap <b>Open Camera</b>, point at the empty background and choose the final phone position.</li>
+        <li>While the scene is empty, tap <b>Set Empty Background</b> and keep the phone still.</li>
+        <li>Place the item and one marker in the measurement plane, then tap <b>Detect Object</b>.</li>
+        <li>Make sure the green frame contains the complete item. Keep the marker visible elsewhere inside the camera view.</li>
+        <li>If the live item frame does not appear, Capture is still available and the photo will be analysed after shooting.</li>
+        <li>Tap the round Camera icon.</li>
+        <li>The captured photo is then analysed for the marker and item separately.</li>
+        <li><b>Foreground sensitivity:</b> lower it when a pale/low-contrast item is not detected; raise it when shadows or background are included in the frame.</li>
+        <li><b>Minimum object size:</b> lower it for a small product that is ignored; raise it when tiny background marks are framed as the product.</li>
       </ol>
     </section>
   </main>
-
-  <dialog id="setupDialog" class="app-dialog">
-    <p class="eyebrow">CAMERA SETUP · 拍摄设置</p>
-    <h2>Calibrate once for this phone position</h2>
-    <label class="dialog-field"><span>Rear camera lens to table · 镜头到桌面 (cm)</span><input id="setupDistance" type="number" min="1" step="0.01" inputmode="decimal" placeholder="e.g. 60" required></label>
-    <label class="dialog-field"><span>Maximum item thickness · 物品最厚处 (cm)</span><input id="setupThickness" type="number" min="0" step="0.01" inputmode="decimal" placeholder="e.g. 5" required></label>
-    <p class="measurement-note">Keep the phone level and fixed. Place only the printed 20 × 20 cm reference flat and centred. Remove it after setup. <a href="reference/20cm_reference_marker.pdf" target="_blank" rel="noopener">Print reference</a></p>
-    <video id="setupVideo" class="barcode-video" autoplay muted playsinline hidden></video>
-    <p id="setupMessage" class="dialog-message" role="status">Enter both values before opening the camera.</p>
-    <div class="dialog-actions">
-      <button id="setupOpenCamera" type="button">Open Camera</button>
-      <button id="setupDetectReference" type="button" disabled>Detect Reference Paper</button>
-      <button id="setupUse" class="primary" type="button" disabled>Use Setup</button>
-      <button id="setupCancel" type="button">Back</button>
-    </div>
-  </dialog>
 
   <dialog id="barcodeDialog" class="app-dialog">
     <form id="barcodeForm" method="dialog">
@@ -209,7 +188,7 @@
     </div>
     <div class="history-table-wrap">
       <table class="history-table">
-        <thead><tr><th>No.</th><th>Item Image</th><th>Barcode</th><th>Horizontal (cm)</th><th>Vertical (cm)</th><th>Thickness (cm)</th><th>Distance (cm)</th><th>Corrected estimate H × V (cm)</th><th>Method</th><th>Frame</th><th>Measured At</th></tr></thead>
+        <thead><tr><th>No.</th><th>Item Image</th><th>Barcode</th><th>Horizontal (cm)</th><th>Vertical (cm)</th><th>Frame</th><th>Measured At</th></tr></thead>
         <tbody id="historyTableBody"></tbody>
       </table>
       <p id="emptyHistory" class="dialog-message">No saved records yet.</p>
@@ -227,6 +206,6 @@
   </dialog>
 
   <canvas id="processingCanvas" hidden></canvas>
-  <script src="app.js?v=0.12.0" defer></script>
+  <script src="app.js?v=0.12.1" defer></script>
 </body>
 </html>

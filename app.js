@@ -80,6 +80,43 @@ const markerStatus = document.querySelector("#markerStatus");
 const liveMessage = document.querySelector("#liveMessage");
 const emptyState = document.querySelector("#emptyState");
 
+
+const referenceSizeSelect = document.querySelector('#referenceSize');
+const referenceDownload = document.querySelector('#referenceDownload');
+const placementHint = document.querySelector('#placementHint');
+const tapFocusIndicator = document.querySelector('#tapFocusIndicator');
+const MARKER_ON_ITEM = true;
+let markerSizeCm = 5;
+referenceSizeSelect.addEventListener('change', () => {
+  markerSizeCm = Number(referenceSizeSelect.value);
+  referenceDownload.href = `reference/${markerSizeCm}cm_reference_marker.pdf`;
+  liveMarker = null; capturedMarker = null;
+  markerStatus.textContent = 'Recheck marker after size change';
+  if (capturedFullCanvas) {
+    const ctx = capturedFullCanvas.getContext('2d', {willReadFrequently:true});
+    const image = ctx.getImageData(0,0,capturedFullCanvas.width,capturedFullCanvas.height);
+    capturedMarker = detectReferenceMarker(image.data,image.width,image.height);
+    referenceScale.textContent = capturedMarker ? `${(((capturedMarker.width+capturedMarker.height)/2)/markerSizeCm).toFixed(2)} px/cm` : '—';
+  }
+});
+placementHint.textContent = MARKER_ON_ITEM
+  ? 'Version A: place marker flat on item top; marker may overlap item frame. Measure the same top plane.'
+  : 'Version B: place marker beside the item, facing the camera, at the same depth as the measured face.';
+video.addEventListener('pointerdown', async event => {
+  if (!running || !stream) return;
+  const rect = video.getBoundingClientRect();
+  tapFocusIndicator.hidden = false;
+  tapFocusIndicator.style.left = `${event.clientX - rect.left + video.offsetLeft}px`;
+  tapFocusIndicator.style.top = `${event.clientY - rect.top + video.offsetTop}px`;
+  const track = stream.getVideoTracks()[0];
+  try {
+    const caps = track.getCapabilities?.() || {};
+    if (caps.focusMode?.includes('single-shot')) await track.applyConstraints({advanced:[{focusMode:'single-shot'}]});
+    else if (caps.focusMode?.includes('continuous')) await track.applyConstraints({advanced:[{focusMode:'continuous'}]});
+  } catch (error) { /* Browser may not support focus controls; auto-focus remains active. */ }
+  setTimeout(() => { tapFocusIndicator.hidden = true; }, 900);
+});
+
 const PROCESS_WIDTH = 320;
 const PROCESS_INTERVAL_MS = 80;
 const SMOOTHING = 0.32;
@@ -116,161 +153,6 @@ let barcodeStream = null;
 let barcodeScanRunning = false;
 let pendingBarcode = "";
 let measurementRecords = loadMeasurementRecords();
-const setupDialog = document.querySelector("#setupDialog");
-const setupDistance = document.querySelector("#setupDistance");
-const setupThickness = document.querySelector("#setupThickness");
-const itemThickness = document.querySelector("#itemThickness");
-const setupVideo = document.querySelector("#setupVideo");
-const setupMessage = document.querySelector("#setupMessage");
-const setupOpenCamera = document.querySelector("#setupOpenCamera");
-const setupDetectReference = document.querySelector("#setupDetectReference");
-const setupUse = document.querySelector("#setupUse");
-let cameraCalibration = null; // Session only: never trust a scale from a previous visit.
-let pendingCalibration = null;
-let capturedCalibration = null;
-let capturedThickness = null;
-let referenceBusy = false;
-
-function validateSetupInputs() {
-  const distance = Number(setupDistance.value);
-  const thickness = Number(setupThickness.value);
-  if (!setupDistance.value || !Number.isFinite(distance) || distance <= 0 ||
-      !setupThickness.value || !Number.isFinite(thickness) || thickness < 0 || thickness >= distance) {
-    setupMessage.textContent = "Enter lens-to-table distance > 0 and thickness ≥ 0 but less than distance.";
-    return false;
-  }
-  return true;
-}
-function openCameraSetup() {
-  detectionActive = false;
-  captureButton.disabled = true;
-  pendingCalibration = null;
-  setupUse.disabled = true;
-  setupDistance.value = cameraCalibration?.distanceCm || setupDistance.value;
-  setupThickness.value = itemThickness.value;
-  setupVideo.srcObject = stream;
-  setupVideo.hidden = !running;
-  if (running) setupVideo.play().catch(() => {});
-  setupDetectReference.disabled = !running;
-  setupMessage.textContent = "Enter distance and thickness. Place only the 20 × 20 cm reference on the table.";
-  if (!setupDialog.open) setupDialog.showModal();
-}
-document.querySelector("#setupCancel").addEventListener("click", () => {
-  setupDialog.close();
-  if (!cameraCalibration) showHome();
-});
-function invalidateReference() {
-  pendingCalibration = null;
-  setupUse.disabled = true;
-}
-setupDistance.addEventListener("input", invalidateReference);
-setupThickness.addEventListener("input", () => { setupUse.disabled = !pendingCalibration || !validateSetupInputs(); });
-setupDialog.addEventListener("cancel", event => event.preventDefault());
-document.querySelector("#cameraSetupButton").addEventListener("click", () => requestRecordDecision("setup"));
-setupOpenCamera.addEventListener("click", async () => {
-  if (!validateSetupInputs()) return;
-  if (!running) await startCamera();
-  if (!running) { setupMessage.textContent = detectionStatus.textContent + ": " + liveMessage.textContent; return; }
-  setupVideo.srcObject = stream;
-  setupVideo.hidden = false;
-  await setupVideo.play();
-  setupDetectReference.disabled = false;
-  setupMessage.textContent = "Keep all four outer black edges visible; align the square with the screen. Then Detect Reference Paper.";
-});
-setupDetectReference.addEventListener("click", async () => {
-  if (referenceBusy || !running || !validateSetupInputs()) return;
-  referenceBusy = true;
-  setupDistance.disabled = true;
-  setupThickness.disabled = true;
-  document.querySelector("#setupCancel").disabled = true;
-  setupDetectReference.disabled = true;
-  setupUse.disabled = true;
-  pendingCalibration = null;
-  try {
-    const samples = [];
-    for (let i = 0; i < 3; i++) {
-      if (!running || video.readyState < 2) throw new Error("Camera not ready. Open Camera and retry.");
-      const canvas = document.createElement("canvas");
-      canvas.width = 640;
-      canvas.height = Math.round(640 * video.videoHeight / video.videoWidth);
-      const ctx = canvas.getContext("2d", {willReadFrequently:true});
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const marker = detectReferenceMarker(frame.data, canvas.width, canvas.height);
-      if (!marker || marker.width < 60 || marker.height < 60 ||
-          marker.x < 4 || marker.y < 4 || marker.x + marker.width > canvas.width - 4 || marker.y + marker.height > canvas.height - 4 ||
-          Math.abs(marker.width / marker.height - 1) > 0.03 ||
-          Math.abs((marker.x + marker.width/2) / canvas.width - 0.5) > 0.15 ||
-          Math.abs((marker.y + marker.height/2) / canvas.height - 0.5) > 0.15) {
-        throw new Error("Reference not clear, centred and square. Show the entire printed 20 cm pattern, keep the phone level and align its edges with the screen.");
-      }
-      samples.push({x:marker.width / canvas.width / 20, y:marker.height / canvas.height / 20});
-      await new Promise(resolve => setTimeout(resolve, 120));
-    }
-    if (!running) throw new Error("Camera stopped; reopen and retry.");
-    for (const axis of ["x","y"]) {
-      const values = samples.map(s => s[axis]);
-      if (Math.max(...values) / Math.min(...values) > 1.015) throw new Error("Reference moved. Keep the stand fixed and retry.");
-    }
-    pendingCalibration = {
-      distanceCm: Number(setupDistance.value),
-      normalizedScaleX: samples.reduce((a,b)=>a+b.x,0)/samples.length,
-      normalizedScaleY: samples.reduce((a,b)=>a+b.y,0)/samples.length,
-      sourceWidth:video.videoWidth, sourceHeight:video.videoHeight,
-      calibratedAt:new Date().toISOString()
-    };
-    setupMessage.textContent = "20 × 20 cm reference detected. Use Setup, remove the paper and item, then Set Empty Background.";
-    setupUse.disabled = false;
-  } catch (error) { setupMessage.textContent = error.message; }
-  finally { referenceBusy = false; setupDistance.disabled = false; setupThickness.disabled = false; document.querySelector("#setupCancel").disabled = false; setupDetectReference.disabled = !running; }
-});
-setupUse.addEventListener("click", () => {
-  if (!pendingCalibration || !validateSetupInputs() || !running) return;
-  cameraCalibration = {...pendingCalibration};
-  itemThickness.value = setupThickness.value;
-  backgroundFrame = null;
-  detectButton.disabled = true;
-  captureResult.hidden = true;
-  currentMeasurement = null;
-  document.querySelector("#setupSummary").textContent = `Lens → table: ${cameraCalibration.distanceCm} cm · 20 × 20 cm reference saved for this session`;
-  markerStatus.textContent = "Calibration saved";
-  liveMessage.textContent = "Remove the reference and product, then Set Empty Background.";
-  setupDialog.close();
-});
-function validItemSetup() {
-  if (!cameraCalibration) { openCameraSetup(); return false; }
-  const thickness = Number(itemThickness.value);
-  if (!itemThickness.value || !Number.isFinite(thickness) || thickness < 0 || thickness >= cameraCalibration.distanceCm) {
-    liveMessage.textContent = "Enter this item's maximum thickness (≥ 0 and less than lens-to-table distance).";
-    itemThickness.focus(); return false;
-  }
-  if (video.videoWidth !== cameraCalibration.sourceWidth || video.videoHeight !== cameraCalibration.sourceHeight) {
-    cameraCalibration = null; openCameraSetup(); return false;
-  }
-  return true;
-}
-function shelfDimensions(frame, calibration, thickness, width, height) {
-  const scaleX = calibration.normalizedScaleX * width;
-  const scaleY = calibration.normalizedScaleY * height;
-  const tableH = frame.width / scaleX;
-  const tableV = frame.height / scaleY;
-  const factor = (calibration.distanceCm - thickness) / calibration.distanceCm;
-  // Bound each edge over all possible heights [0, thickness]. This also
-  // covers off-centre silhouettes where a single scale factor is unsafe.
-  // Assumes a level pinhole camera with principal point at image centre.
-  const envelope = (low, high, centre, scale) => {
-    const lo = (low - centre) / scale;
-    const hi = (high - centre) / scale;
-    return Math.max(hi, hi * factor) - Math.min(lo, lo * factor);
-  };
-  return {
-    correctedHorizontalCm: tableH * factor,
-    correctedVerticalCm: tableV * factor,
-    horizontalCm: Math.ceil(envelope(frame.x, frame.x + frame.width, width / 2, scaleX) * 1.05 * 100 - 1e-9) / 100,
-    verticalCm: Math.ceil(envelope(frame.y, frame.y + frame.height, height / 2, scaleY) * 1.05 * 100 - 1e-9) / 100
-  };
-}
-
 
 thresholdInput.addEventListener("input", () => {
   thresholdValue.value = thresholdInput.value;
@@ -284,12 +166,11 @@ startButton.addEventListener("click", async () => {
     stopCamera();
     return;
   }
-  if (!cameraCalibration) { openCameraSetup(); return; }
   await startCamera();
 });
 
 calibrateButton.addEventListener("click", async () => {
-  if (!running || video.readyState < 2 || !cameraCalibration) { openCameraSetup(); return; }
+  if (!running || video.readyState < 2) return;
   calibrateButton.disabled = true;
   detectButton.disabled = true;
   captureButton.disabled = true;
@@ -306,16 +187,16 @@ calibrateButton.addEventListener("click", async () => {
   markerMissingFrames = 0;
   overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
   detectionStatus.textContent = "Empty background saved";
-  liveMessage.textContent = "Place the item, enter its thickness, then tap Detect Object";
-  markerStatus.textContent = "Calibration saved";
+  liveMessage.textContent = "Place the item and marker, then tap Detect Object";
+  markerStatus.textContent = "Waiting for Detect Object";
   calibrateButton.textContent = "Set Empty Background Again";
   calibrateButton.disabled = false;
   detectButton.disabled = false;
 });
 
 detectButton.addEventListener("click", () => {
-  if (currentMeasurement || detectionActive || (capturedFullCanvas && !captureResult.hidden)) {
-    if (!currentMeasurement || currentMeasurement.saved) prepareForNextBarcode();
+  if (currentMeasurement) {
+    if (currentMeasurement.saved) prepareForNextBarcode();
     else requestRecordDecision("detect");
     return;
   }
@@ -323,7 +204,7 @@ detectButton.addEventListener("click", () => {
 });
 
 function beginDetection() {
-  if (!running || !backgroundFrame || !validItemSetup()) return;
+  if (!running || !backgroundFrame) return;
   detectionActive = true;
   smoothedBox = null;
   stableFrames = 0;
@@ -332,9 +213,9 @@ function beginDetection() {
   liveMarker = null;
   markerMissingFrames = 0;
   captureButton.disabled = false;
-  detectButton.textContent = "Detect New Object";
-  detectionStatus.textContent = "Looking for item";
-  liveMessage.textContent = "Green frame = item · saved 20 cm calibration";
+  detectButton.textContent = "Detecting…";
+  detectionStatus.textContent = "Looking for item and marker";
+  liveMessage.textContent = "Green frame = item; cyan frame = reference marker";
 }
 
 captureButton.addEventListener("click", captureCurrentObject);
@@ -413,14 +294,10 @@ function useBarcode(value) {
   smoothedBox = null;
   lastValidBox = null;
   detectionActive = false;
-  itemThickness.value = "";
-  capturedFullCanvas = null;
-  detectButton.textContent = "Detect Object";
-  if (!cameraCalibration) openCameraSetup();
   if (running && backgroundFrame) {
     detectButton.disabled = false;
     detectionStatus.textContent = "Ready for next item";
-    liveMessage.textContent = `Barcode ${currentBarcode}: enter thickness and tap Detect Object`;
+    liveMessage.textContent = `Barcode ${currentBarcode}: place the product and marker, then tap Detect Object`;
   } else {
     detectionStatus.textContent = "Barcode ready";
     liveMessage.textContent = `Barcode ${currentBarcode}: tap Open Camera to begin`;
@@ -513,7 +390,6 @@ async function startCamera() {
     return;
   }
   try {
-    cameraCalibration = null;
     stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: {
@@ -537,7 +413,7 @@ async function startCamera() {
     resizeCanvases();
     detectionActive = false;
     detectionStatus.textContent = "Empty background required";
-    markerStatus.textContent = "Calibration saved; background required";
+    markerStatus.textContent = "Waiting for background";
     liveMessage.textContent = "Remove the item and marker, then tap Set Empty Background";
     requestAnimationFrame(processLoop);
   } catch (error) {
@@ -550,11 +426,6 @@ async function startCamera() {
 
 function stopCamera() {
   running = false;
-  cameraCalibration = null;
-  pendingCalibration = null;
-  setupUse.disabled = true;
-  setupDetectReference.disabled = true;
-  document.querySelector("#setupSummary").textContent = "Camera reopened or moved? Recalibrate using Camera Setup.";
   stream?.getTracks().forEach(track => track.stop());
   stream = null;
   video.srcObject = null;
@@ -634,25 +505,32 @@ function processFrame() {
     drawOverlay(null, null);
     detectionStatus.textContent = "Calibration required";
     confidenceText.textContent = "—";
-    markerStatus.textContent = "Calibration saved; background required";
+    markerStatus.textContent = "Waiting for background";
     captureButton.disabled = true;
     return;
   }
 
   if (!detectionActive) {
     drawOverlay(null, null);
-    markerStatus.textContent = "Calibration saved";
+    markerStatus.textContent = "Waiting for Detect Object";
     captureButton.disabled = true;
     return;
   }
 
   const alignment = estimateBackgroundOffset(frame.data, backgroundFrame, width, height, 6);
-  liveMarker = null;
-  markerStatus.textContent = cameraCalibration ? "Calibration saved" : "Setup required";
+  const detectedMarker = detectReferenceMarker(frame.data, width, height);
+  if (detectedMarker) {
+    liveMarker = { ...detectedMarker };
+    markerMissingFrames = 0;
+  } else {
+    markerMissingFrames += 1;
+    if (markerMissingFrames > 10) liveMarker = null;
+  }
+  markerStatus.textContent = liveMarker ? "Detected" : "Not detected";
   const mask = maskFromSavedBackground(
     frame.data, backgroundFrame, width, height, threshold, alignment.dx, alignment.dy
   );
-  if (liveMarker) {
+  if (liveMarker && !MARKER_ON_ITEM) {
     const margin = Math.max(4, Math.round(Math.max(liveMarker.width, liveMarker.height) * 0.25));
     clearMaskRegion(mask, width, height, liveMarker, margin);
   }
@@ -689,8 +567,8 @@ function processFrame() {
   detectionStatus.textContent = "Item framed";
   confidenceText.textContent = `${Math.round(confidence * 100)}%`;
   liveMessage.textContent = candidate.touchesEdge
-    ? "Move the item fully into view. If it cannot fit, raise the stand and repeat Camera Setup."
-    : stableFrames < 3 ? "Hold steady — preparing Capture" : "Item ready — check the whole item is framed, then Capture";
+    ? "Move back: part of the item may be outside the picture"
+    : stableFrames < 3 ? "Hold steady — preparing Capture" : "Item ready — make sure the marker is also visible, then Capture";
   if (!captureButton.disabled) detectButton.textContent = "Detect New Object";
 }
 
@@ -764,7 +642,7 @@ function clearMaskRegion(mask, width, height, box, margin) {
 }
 
 async function captureCurrentObject() {
-  if (!running || !detectionActive || video.readyState < 2 || !validItemSetup()) return;
+  if (!running || !detectionActive || video.readyState < 2) return;
   captureButton.disabled = true;
   currentMeasurement = null;
   currentItemImageBlob = null;
@@ -778,9 +656,18 @@ async function captureCurrentObject() {
   const fullCtx = full.getContext("2d", { willReadFrequently: true });
   fullCtx.drawImage(video, 0, 0, full.width, full.height);
 
-  capturedMarker = null;
-  capturedCalibration = {...cameraCalibration};
-  capturedThickness = Number(itemThickness.value);
+  const fullFrame = fullCtx.getImageData(0, 0, full.width, full.height);
+  capturedMarker = detectReferenceMarker(fullFrame.data, full.width, full.height);
+  if (!capturedMarker && liveMarker) {
+    const liveScaleX = full.width / workCanvas.width;
+    const liveScaleY = full.height / workCanvas.height;
+    capturedMarker = {
+      x: liveMarker.x * liveScaleX,
+      y: liveMarker.y * liveScaleY,
+      width: liveMarker.width * liveScaleX,
+      height: liveMarker.height * liveScaleY
+    };
+  }
   const analysisCanvas = document.createElement("canvas");
   analysisCanvas.width = workCanvas.width;
   analysisCanvas.height = workCanvas.height;
@@ -794,7 +681,7 @@ async function captureCurrentObject() {
     smallFrame.data, backgroundFrame, analysisCanvas.width, analysisCanvas.height,
     Number(thresholdInput.value), alignment.dx, alignment.dy
   );
-  if (capturedMarker) {
+  if (capturedMarker && !MARKER_ON_ITEM) {
     const markerOnAnalysis = {
       x: capturedMarker.x * analysisCanvas.width / full.width,
       y: capturedMarker.y * analysisCanvas.height / full.height,
@@ -842,14 +729,14 @@ async function captureCurrentObject() {
   pixelSize.textContent = `${Math.round(editableFrame.width)} × ${Math.round(editableFrame.height)} px`;
   imageSize.textContent = `${full.width} × ${full.height}`;
   frameCoverage.textContent = `${((editableFrame.width * editableFrame.height) / (full.width * full.height) * 100).toFixed(1)}%`;
-  markerStatus.textContent = "Calibration saved";
+  markerStatus.textContent = capturedMarker ? "Detected" : "Not detected";
   analysisStatus.textContent = "FRAME REVIEW";
   analysisReason.textContent = capturedItem ? "Review the suggested frame" : "System frame unavailable — adjust the manual frame";
-  document.querySelector("#correctedSize").textContent = "Pending frame confirmation";
-  document.querySelector("#thicknessSize").textContent = `${capturedThickness} cm (entered)`;
   horizontalSize.textContent = "Pending frame confirmation";
   verticalSize.textContent = "Pending frame confirmation";
-  referenceScale.textContent = `${(capturedCalibration.normalizedScaleX * full.width).toFixed(2)} × ${(capturedCalibration.normalizedScaleY * full.height).toFixed(2)} px/cm (table)`;
+  referenceScale.textContent = capturedMarker
+    ? `${(((capturedMarker.width + capturedMarker.height) / 2) / markerSizeCm).toFixed(2)} px/cm`
+    : "—";
   captureResult.hidden = false;
   captureResult.scrollIntoView({ behavior: "smooth", block: "start" });
   captureButton.setAttribute("aria-label", "Capture object");
@@ -1022,19 +909,14 @@ function renderFrameEditor() {
 
 async function confirmFrameAndMeasure() {
   if (!capturedFullCanvas || !editableFrame) return;
-  if (!capturedCalibration || !Number.isFinite(capturedThickness) || capturedThickness < 0 || capturedThickness >= capturedCalibration.distanceCm) {
+  if (!capturedMarker) {
     analysisStatus.textContent = "REVIEW REQUIRED";
-    analysisReason.textContent = "Valid camera calibration and item thickness are required.";
+    analysisReason.textContent = "Selected reference marker was not detected; measurement was not guessed";
     return;
   }
-  if (editableFrame.x <= 1 || editableFrame.y <= 1 || editableFrame.x + editableFrame.width >= capturedFullCanvas.width - 1 || editableFrame.y + editableFrame.height >= capturedFullCanvas.height - 1) {
-    analysisStatus.textContent = "REVIEW REQUIRED";
-    analysisReason.textContent = "Frame touches the photo edge; move the item fully into view and capture again.";
-    return;
-  }
-  const dimensions = shelfDimensions(editableFrame, capturedCalibration, capturedThickness, capturedFullCanvas.width, capturedFullCanvas.height);
-  const {horizontalCm, verticalCm} = dimensions;
-  const pixelsPerCm = capturedCalibration.normalizedScaleX * capturedFullCanvas.width;
+  const pixelsPerCm = ((capturedMarker.width + capturedMarker.height) / 2) / markerSizeCm;
+  const horizontalCm = editableFrame.width / pixelsPerCm;
+  const verticalCm = editableFrame.height / pixelsPerCm;
   const date = new Date().toISOString().slice(0, 10);
   const safeBarcode = currentBarcode.replace(/[^a-z0-9_-]+/gi, "-").slice(0, 48) || "unknown";
   const itemCanvas = document.createElement("canvas");
@@ -1087,20 +969,12 @@ async function confirmFrameAndMeasure() {
   horizontalSize.textContent = `${horizontalCm.toFixed(2)} cm`;
   verticalSize.textContent = `${verticalCm.toFixed(2)} cm`;
   referenceScale.textContent = `${pixelsPerCm.toFixed(2)} px/cm`;
-  document.querySelector("#correctedSize").textContent = `${dimensions.correctedHorizontalCm.toFixed(2)} × ${dimensions.correctedVerticalCm.toFixed(2)} cm (estimate)`;
-  document.querySelector("#thicknessSize").textContent = `${capturedThickness} cm (entered)`;
-  analysisStatus.textContent = "MEASURED · SHELF ALLOWANCE";
+  analysisStatus.textContent = "MEASURED";
   analysisReason.textContent = manualFrameEnabled ? "Manual frame confirmed" : "System frame confirmed";
   currentMeasurement = {
     barcode: currentBarcode,
     horizontalCm: Number(horizontalCm.toFixed(2)),
     verticalCm: Number(verticalCm.toFixed(2)),
-    thicknessCm: capturedThickness,
-    distanceCm: capturedCalibration.distanceCm,
-    correctedHorizontalCm: Number(dimensions.correctedHorizontalCm.toFixed(2)),
-    correctedVerticalCm: Number(dimensions.correctedVerticalCm.toFixed(2)),
-    method: "Depth envelope + 5% (rounded up)",
-    calibrationAt: capturedCalibration.calibratedAt,
     frameType: manualFrameEnabled ? "Manual" : "System",
     measuredAt: new Date().toISOString(),
     imageFilename: capturedFilename,
@@ -1127,14 +1001,12 @@ function requestRecordDecision(action) {
   if (!currentMeasurement) {
     if (action === "history") openHistory();
     else if (action === "home") showHome();
-    else if (action === "setup") openCameraSetup();
     else prepareForNextBarcode();
     return;
   }
   if (currentMeasurement.saved) {
     if (action === "history") openHistory();
     else if (action === "home") showHome();
-    else if (action === "setup") openCameraSetup();
     else prepareForNextBarcode();
     return;
   }
@@ -1164,7 +1036,6 @@ async function finishRecordDecision(shouldSave) {
     showHome();
     return;
   }
-  if (action === "setup") { openCameraSetup(); return; }
   prepareForNextBarcode();
 }
 
@@ -1196,7 +1067,6 @@ function prepareForNextBarcode() {
   currentMeasurement = null;
   currentItemImageBlob = null;
   currentBarcode = "";
-  capturedFullCanvas = null;
   captureResult.hidden = true;
   nextItemButton.hidden = true;
   saveCurrentRecordButton.hidden = true;
@@ -1254,16 +1124,12 @@ function renderHistory() {
         image.title = "Tap to open item image";
         image.addEventListener("click", () => window.open(url, "_blank"));
         imageCell.replaceChildren(image);
-      }).catch(() => { imageCell.textContent = "Unavailable"; });
+      });
     }
     const values = [
       record.barcode,
       Number(record.horizontalCm).toFixed(2),
       Number(record.verticalCm).toFixed(2),
-      record.thicknessCm ?? "—",
-      record.distanceCm ?? "—",
-      record.correctedHorizontalCm == null ? "—" : `${record.correctedHorizontalCm.toFixed(2)} × ${record.correctedVerticalCm.toFixed(2)}`,
-      record.method || "Legacy reference",
       record.frameType,
       formatRecordDate(record.measuredAt)
     ];
@@ -1405,10 +1271,10 @@ async function clearItemImages() {
 
 function buildMeasurementWorkbook(records) {
   const rows = [
-    ["No.", "Barcode", "Horizontal (cm)", "Vertical (cm)", "Frame Type", "Measured At", "Annotated Image Filename", "Item Image Filename", "Thickness (cm)", "Lens to Table (cm)", "Corrected H Estimate (cm)", "Corrected V Estimate (cm)", "Method", "Reference Calibrated At"],
+    ["No.", "Barcode", "Horizontal (cm)", "Vertical (cm)", "Frame Type", "Measured At", "Annotated Image Filename", "Item Image Filename"],
     ...records.map((record, index) => [
       index + 1, record.barcode, Number(record.horizontalCm), Number(record.verticalCm),
-      record.frameType, formatRecordDate(record.measuredAt), record.imageFilename || "", record.itemImageFilename || "", record.thicknessCm ?? "", record.distanceCm ?? "", record.correctedHorizontalCm ?? "", record.correctedVerticalCm ?? "", record.method || "Legacy reference", record.calibrationAt || ""
+      record.frameType, formatRecordDate(record.measuredAt), record.imageFilename || "", record.itemImageFilename || ""
     ])
   ];
   const sheetRows = rows.map((row, rowIndex) => {
@@ -1711,7 +1577,7 @@ function drawOverlay(box, marker = null) {
     overlayCtx.setLineDash([]);
     overlayCtx.fillStyle = "#42d7ff";
     overlayCtx.font = `700 ${Math.max(16, overlay.width / 44)}px system-ui`;
-    overlayCtx.fillText("20 CM REFERENCE", marker.x * sx, Math.max(18, marker.y * sy - 7));
+    overlayCtx.fillText("5 CM REFERENCE", marker.x * sx, Math.max(18, marker.y * sy - 7));
   }
   if (!box) return;
   const x = box.x * sx;
@@ -1758,13 +1624,13 @@ document.addEventListener("visibilitychange", () => {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=0.12.0")
+    navigator.serviceWorker.register("service-worker.js?v=0.11.0")
       .then(registration => registration.update())
       .catch(() => {});
     navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (sessionStorage.getItem("live-object-frame-reloaded") === "0.12.0") return;
-      sessionStorage.setItem("live-object-frame-reloaded", "0.12.0");
-      if (!currentBarcode && !running) window.location.reload();
+      if (sessionStorage.getItem("live-object-frame-reloaded") === "0.11.0") return;
+      sessionStorage.setItem("live-object-frame-reloaded", "0.11.0");
+      window.location.reload();
     });
   });
 }
