@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101820">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Live Object Frame</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css?v=0.12.0">
+</head>
+<body>
+  <main id="homePage" class="home-page">
+    <p class="eyebrow">OBJECT MEASUREMENT · VERSION 0.12.0</p>
+    <h1>Measure products with your phone</h1>
+    <p>Fix your phone above the table. Calibrate once with the 20 × 20 cm reference, then measure each product.</p>
+    <button id="startMeasurementButton" class="primary" type="button">Start Measurement</button>
+    <button id="homeHistoryButton" type="button">View History <span id="homeHistoryCount">0</span></button>
+  </main>
+
+  <main id="measurementPage" class="app-shell" hidden>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">PHASE 2B · VERSION 0.12.0</p>
+        <h1>Live Object Frame</h1>
+      </div>
+      <div class="header-actions">
+        <button id="homeButton" class="compact" type="button">Home</button>
+        <button id="historyButton" class="compact" type="button">History <span id="historyCount">0</span></button>
+        <span id="cameraState" class="pill idle">Camera off</span>
+      </div>
+    </header>
+
+    <section class="viewer" id="viewer" aria-label="Live camera preview">
+      <video id="camera" autoplay muted playsinline></video>
+      <canvas id="overlay"></canvas>
+      <div id="emptyState" class="empty-state">
+        <div class="camera-icon" aria-hidden="true"></div>
+        <strong>Camera is not running</strong>
+        <span>Tap Open Camera to begin.</span>
+      </div>
+      <div class="safe-guide" aria-hidden="true"></div>
+      <div id="liveMessage" class="live-message">Place one item near the centre</div>
+      <button id="captureButton" class="capture-fab" type="button" aria-label="Capture object" title="Capture object" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 10.4 2h3.2L15 4h3.5A3.5 3.5 0 0 1 22 7.5v10a3.5 3.5 0 0 1-3.5 3.5h-13A3.5 3.5 0 0 1 2 17.5v-10A3.5 3.5 0 0 1 5.5 4H9Zm3 4a5 5 0 1 0 0 10 5 5 0 0 0 0-10Zm0 2.2a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6Z"/></svg>
+      </button>
+    </section>
+
+    <section class="controls">
+      <button id="startButton" class="primary" type="button">Open Camera</button>
+      <button id="calibrateButton" type="button" disabled>Set Empty Background</button>
+      <button id="detectButton" type="button" disabled>Detect Object</button>
+      <button id="cameraSetupButton" type="button">Camera Setup · 拍摄设置</button>
+    </section>
+
+    <section class="item-settings">
+      <label class="dialog-field"><span>Maximum item thickness · 物品最厚处 (cm)</span><input id="itemThickness" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Enter for each product" required></label>
+      <p id="setupSummary" class="measurement-note">Camera setup required</p>
+    </section>
+
+    <section class="status-card" aria-live="polite">
+      <div>
+        <span class="label">Detection</span>
+        <strong id="detectionStatus">Waiting for camera</strong>
+      </div>
+      <div>
+        <span class="label">Confidence</span>
+        <strong id="confidence">—</strong>
+      </div>
+      <div>
+        <span class="label">Processing</span>
+        <strong id="fps">—</strong>
+      </div>
+      <div>
+        <span class="label">20 × 20 cm Reference</span>
+        <strong id="markerStatus">Setup required</strong>
+      </div>
+    </section>
+
+    <section id="captureResult" class="capture-result" hidden>
+      <div class="result-heading">
+        <div>
+          <p class="eyebrow">CAPTURE ANALYSIS</p>
+          <h2>Object captured</h2>
+        </div>
+        <button id="closeResultButton" class="compact" type="button">Close</button>
+      </div>
+      <div id="frameEditorStage" class="frame-editor-stage">
+        <canvas id="frameEditor" aria-label="Captured photo frame editor"></canvas>
+        <p id="editorHint" class="measurement-note">Review the suggested frame. Choose Manual Frame to move or resize it.</p>
+        <div class="editor-toolbar">
+          <button id="useSystemFrame" class="primary" type="button">Use System Frame</button>
+          <button id="manualFrame" type="button">Manual Frame</button>
+          <button id="undoFrame" class="compact" type="button" disabled>Undo</button>
+          <button id="redoFrame" class="compact" type="button" disabled>Redo</button>
+          <button id="resetFrame" class="compact" type="button">Reset</button>
+        </div>
+        <button id="confirmFrame" class="save-button" type="button">Confirm Frame &amp; Measure</button>
+      </div>
+      <img id="capturedPreview" alt="Measured object with frame and dimensions" hidden>
+      <div class="capture-metrics">
+        <div><span>Analysis status</span><strong id="analysisStatus">—</strong></div>
+        <div><span>Reason</span><strong id="analysisReason">—</strong></div>
+        <div><span>Horizontal size</span><strong id="horizontalSize">—</strong></div>
+        <div><span>Vertical size</span><strong id="verticalSize">—</strong></div>
+        <div><span>Thickness-corrected estimate</span><strong id="correctedSize">—</strong></div>
+        <div><span>Maximum thickness (entered)</span><strong id="thicknessSize">—</strong></div>
+        <div><span>Reference scale</span><strong id="referenceScale">—</strong></div>
+        <div><span>Object pixels</span><strong id="pixelSize">—</strong></div>
+        <div><span>Camera image</span><strong id="imageSize">—</strong></div>
+        <div><span>Frame coverage</span><strong id="frameCoverage">—</strong></div>
+      </div>
+      <p class="measurement-note">H × V are conservative shelf-planning dimensions (envelope over 0–maximum thickness + 5%, rounded up). The smaller thickness-corrected estimate assumes every boundary is at maximum thickness. Different boundary heights can make that estimate too small. Thickness is entered, not camera-measured; verify fit-critical products with a ruler.</p>
+      <button id="saveCurrentRecordButton" type="button" hidden>Save Current Record</button>
+      <button id="nextItemButton" class="primary next-item-button" type="button" hidden>Next Item</button>
+    </section>
+
+    <details class="settings">
+      <summary>Detection settings</summary>
+      <label>
+        <span>Foreground sensitivity</span>
+        <output id="thresholdValue">42</output>
+        <input id="threshold" type="range" min="20" max="90" value="38" step="1">
+      </label>
+      <label>
+        <span>Minimum object size</span>
+        <output id="areaValue">0.2%</output>
+        <input id="minArea" type="range" min="1" max="50" value="2" step="1">
+      </label>
+    </details>
+
+    <section class="instructions">
+      <h2>Quick guide · 简单操作</h2>
+      <ol>
+        <li>Print <a href="reference/20cm_reference_marker.pdf" target="_blank" rel="noopener">20 × 20 cm reference</a> at <b>100% / Actual Size</b>. Check both black outer edges with a ruler: 20 cm each.</li>
+        <li>Fix the phone horizontally above the table, rear lens facing straight down. Measure <b>rear camera lens to table</b>, not phone body to table.</li>
+        <li>Start Measurement → scan/type barcode → Camera Setup: enter distance and first item thickness.</li>
+        <li>Put only the reference flat in the centre of the table, align its sides with the screen, Open Camera, then Detect Reference Paper → Use Setup.</li>
+        <li>Remove the reference and product; tap <b>Set Empty Background</b> once. Place the product near the centre; enter its maximum thickness → Detect Object → Capture → confirm the whole frame.</li>
+        <li>Next Item / Detect New Object → barcode only. Enter the new item's thickness on this page; distance and reference scale stay the same.</li>
+        <li>After moving the stand, changing zoom/lens, or reopening the camera, use <b>Camera Setup</b> to recalibrate and save a fresh empty background. No zoom during measuring.</li>
+        <li><b>Foreground sensitivity:</b> lower for pale missed items; raise when shadows are framed. <b>Minimum object size:</b> lower for small items; raise for background specks.</li>
+      </ol>
+    </section>
+  </main>
+
+  <dialog id="setupDialog" class="app-dialog">
+    <p class="eyebrow">CAMERA SETUP · 拍摄设置</p>
+    <h2>Calibrate once for this phone position</h2>
+    <label class="dialog-field"><span>Rear camera lens to table · 镜头到桌面 (cm)</span><input id="setupDistance" type="number" min="1" step="0.01" inputmode="decimal" placeholder="e.g. 60" required></label>
+    <label class="dialog-field"><span>Maximum item thickness · 物品最厚处 (cm)</span><input id="setupThickness" type="number" min="0" step="0.01" inputmode="decimal" placeholder="e.g. 5" required></label>
+    <p class="measurement-note">Keep the phone level and fixed. Place only the printed 20 × 20 cm reference flat and centred. Remove it after setup. <a href="reference/20cm_reference_marker.pdf" target="_blank" rel="noopener">Print reference</a></p>
+    <video id="setupVideo" class="barcode-video" autoplay muted playsinline hidden></video>
+    <p id="setupMessage" class="dialog-message" role="status">Enter both values before opening the camera.</p>
+    <div class="dialog-actions">
+      <button id="setupOpenCamera" type="button">Open Camera</button>
+      <button id="setupDetectReference" type="button" disabled>Detect Reference Paper</button>
+      <button id="setupUse" class="primary" type="button" disabled>Use Setup</button>
+      <button id="setupCancel" type="button">Back</button>
+    </div>
+  </dialog>
+
+  <dialog id="barcodeDialog" class="app-dialog">
+    <form id="barcodeForm" method="dialog">
+      <p class="eyebrow">PRODUCT IDENTIFICATION</p>
+      <h2>Enter Product Barcode</h2>
+      <label class="dialog-field">
+        <span>Barcode</span>
+        <input id="barcodeInput" type="text" autocomplete="off" enterkeyhint="done" placeholder="Key in product barcode" required>
+      </label>
+      <p id="barcodeMessage" class="dialog-message">Key in the barcode or scan it using the phone camera.</p>
+      <video id="barcodeVideo" class="barcode-video" autoplay muted playsinline hidden></video>
+      <div class="dialog-actions">
+        <button id="scanBarcodeButton" type="button">Scan Barcode</button>
+        <button id="stopBarcodeScanButton" type="button" hidden>Stop Scan</button>
+        <button class="primary" type="submit">Continue</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="duplicateBarcodeDialog" class="app-dialog">
+    <p class="eyebrow">DUPLICATE BARCODE</p>
+    <h2>This barcode already exists</h2>
+    <p id="duplicateBarcodeMessage" class="dialog-message"></p>
+    <div class="dialog-actions three-actions">
+      <button id="cancelDuplicateButton" type="button">Cancel</button>
+      <button id="keepDuplicateButton" type="button">Keep Duplicate</button>
+      <button id="replaceDuplicateButton" class="primary" type="button">Replace</button>
+    </div>
+  </dialog>
+
+  <dialog id="saveRecordDialog" class="app-dialog">
+    <p class="eyebrow">CURRENT PRODUCT</p>
+    <h2>Save this measurement record?</h2>
+    <p id="saveRecordSummary" class="dialog-message"></p>
+    <div class="dialog-actions three-actions">
+      <button id="cancelNextItemButton" type="button">Cancel</button>
+      <button id="skipSaveButton" type="button">Don't Save</button>
+      <button id="saveRecordButton" class="primary" type="button">Save Record</button>
+    </div>
+  </dialog>
+
+  <dialog id="historyDialog" class="app-dialog history-dialog">
+    <div class="result-heading">
+      <div><p class="eyebrow">LOCAL RECORDS</p><h2>Measurement History</h2></div>
+      <button id="closeHistoryButton" class="compact" type="button">Close</button>
+    </div>
+    <div class="history-table-wrap">
+      <table class="history-table">
+        <thead><tr><th>No.</th><th>Item Image</th><th>Barcode</th><th>Horizontal (cm)</th><th>Vertical (cm)</th><th>Thickness (cm)</th><th>Distance (cm)</th><th>Corrected estimate H × V (cm)</th><th>Method</th><th>Frame</th><th>Measured At</th></tr></thead>
+        <tbody id="historyTableBody"></tbody>
+      </table>
+      <p id="emptyHistory" class="dialog-message">No saved records yet.</p>
+    </div>
+    <div id="exportNotice" class="export-notice" hidden>
+      <strong id="exportNoticeTitle"></strong>
+      <span id="exportNoticeFilename"></span>
+      <a id="exportFileLink" class="download-button" download hidden>Download File</a>
+    </div>
+    <div class="dialog-actions">
+      <button id="clearHistoryButton" type="button">Clear History</button>
+      <button id="exportImagesButton" type="button">Generate Image Folder ZIP</button>
+      <button id="exportHistoryButton" class="primary" type="button">Generate Excel</button>
+    </div>
+  </dialog>
+
+  <canvas id="processingCanvas" hidden></canvas>
+  <script src="app.js?v=0.12.0" defer></script>
+</body>
+</html>
