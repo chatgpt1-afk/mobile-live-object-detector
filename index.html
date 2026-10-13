@@ -1,32 +1,131 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#122b35"><title>Tabletop Product Measure</title><link rel="stylesheet" href="styles.css"></head>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101820">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Live Object Frame</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css?v=0.8.0">
+</head>
 <body>
-<header><a href="index.html" class="brand">▣ Tabletop Measure <small>Independent v1.0</small></a><nav><button id="homeBtn">Home</button><button id="historyBtn">History <span id="count">0</span></button><a href="GUIDE.html" target="_blank">操作指南</a></nav></header>
-<main>
-<section id="home" class="hero"><p class="eyebrow">ONE PHONE · A STAND · YOUR DESK</p><h1>Measure space for your products.</h1><p>Calibrate the empty desk, review the product frame and save conservative dimension estimates for planograms.</p><div class="steps"><div><b>01</b> Calibrate</div><div><b>02</b> Capture & review</div><div><b>03</b> Save & export</div></div><button id="begin" class="primary">Start Measurement</button><a class="button" href="reference.html" target="_blank">Print Reference Rectangle</a><p class="notice">Prototype: +5% is a target, not a verified accuracy guarantee. Results require validation before shelf-fit decisions.</p></section>
-<section id="workspace" hidden>
-<div class="productbar"><label>Barcode <input id="barcode" type="text" autocomplete="off" placeholder="Enter or scan barcode"></label><button id="scan">Scan Barcode</button><label>Current view <select id="view"><option value="front">Front · horizontal L / vertical H</option><option value="side">Side · horizontal W / vertical H</option><option value="top">Top · horizontal L / vertical W</option></select></label></div>
-<p id="orientation" class="notice"></p>
-<div class="workgrid"><section class="panel">
-<div class="preview"><video id="video" autoplay muted playsinline hidden></video><canvas id="editor" hidden aria-label="Photo editor. Click reference corners or drag product frame handles."></canvas><div id="empty">Open the camera or upload a photo.</div><span id="modeTag" class="tag">Camera off</span></div>
-<div class="controls"><button id="openCamera" class="primary">Open Camera</button><button id="closeCamera">Stop Camera</button><button id="live">Live Preview</button><label class="button">Upload Photo<input id="upload" type="file" accept="image/*" hidden></label></div>
-<div class="controls"><button id="calPhoto">1 · Capture Reference</button><button id="bgPhoto">2 · Set Empty Background</button><button id="capture" class="primary">3 · Capture Object</button></div>
-<p class="hint">Uploads use the selected photo for the same three actions. Use the same resolution, lens, zoom and tripod position for all photos.</p>
-<div id="calPanel" hidden><h2>Reference corners</h2><p>Tap the OUTSIDE corners: ① top-left → ② top-right → ③ bottom-right → ④ bottom-left. Drag dots to adjust.</p><div class="controls"><label>Rectangle width (cm)<input id="refW" type="number" min="1" max="200" step="0.01" value="15"></label><label>Rectangle height (cm)<input id="refH" type="number" min="1" max="200" step="0.01" value="10"></label></div><div class="controls"><button id="autoRef">Suggest Corners</button><button id="resetRef">Reset Corners</button><button id="confirmCal" class="primary">Confirm Calibration</button></div></div>
-<div id="framePanel" hidden><h2>Review the whole item</h2><p>Drag the four corners, or drag inside to move. Include every protrusion. The rectangle must align with the labelled product axes.</p><div class="controls"><button id="detect">Detect Again</button><button id="manual">Draw New Frame</button><button id="undo">Undo</button><button id="redo">Redo</button></div><label class="check"><input id="whole" type="checkbox"> I checked all edges: the complete item is inside this frame and the photo.</label><button id="measure" class="primary">Confirm Frame & Measure</button></div>
-</section>
-<aside>
-<section class="panel"><h2>Capture setup</h2><label>Lens → desk, vertically (cm)<input id="distance" type="number" min="5" max="1000" step="0.1" placeholder="e.g. 60"></label><label>Maximum thickness in this pose (cm)<input id="thickness" type="number" min="0" max="999" step="0.1" placeholder="e.g. 5"></label><label>Extra clearance (%)<input id="margin" type="number" min="0" max="10" step="0.1" value="2"></label><p class="hint">Measure distance from the camera lens, not the stand. Thickness = desk to the highest point in this pose. Do not compress soft bags.</p><p id="setupStatus" class="status">Reference not calibrated · Empty background not set</p><button id="resetSetup">Reset Setup / Phone Moved</button></section>
-<details class="panel"><summary>Detection settings</summary><label>Sensitivity threshold <output id="thresholdOut">38</output><input id="threshold" type="range" min="10" max="120" value="38"></label><label>Minimum object area (%) <input id="minArea" type="number" min="0.01" max="20" step="0.05" value="0.2"></label><label class="check"><input id="shadow" type="checkbox"> Reduce mild shadows</label><p class="hint">Shadow reduction is OFF by default to avoid dropping dark product edges. Always check the frame. Lower the threshold for pale items; raise it when background noise dominates. Lower minimum area for small items.</p></details>
-<section id="result" class="panel" hidden><h2>Current view result</h2><div id="numbers" class="numbers"></div><p id="quality" class="notice"></p><p id="budget"></p><p class="hint">Thickness is a depth range, not a plane correction. Outputs are rounded UP to 0.1 cm. Lens distortion and input error are not bounded.</p><button id="keepView" class="primary">Add / Replace This View</button></section>
-<section class="panel"><h2>Product views</h2><div id="views">No confirmed views yet.</div><p id="combined"></p><button id="save" class="primary">Save Current Record</button><button id="next">Next Item</button><p class="hint">Two views can cover L/W/H. Shared dimensions use the larger result; no dimension is inferred by sorting.</p></section>
-</aside></div>
-</section>
-<section id="history" hidden><h1>Measurement History</h1><p>Records and images are stored in this browser. Export regularly; clearing browser data removes local records.</p><div class="controls"><button id="excel" class="primary">Generate Excel</button><button id="images">Generate Image ZIP</button><button id="backup">Generate Backup JSON</button><label class="button">Import Backup<input id="import" type="file" accept=".json" hidden></label><button id="clear" class="danger">Clear History</button></div><div class="tablewrap"><table><thead><tr><th>Item</th><th>Barcode</th><th>L cm</th><th>W cm</th><th>H cm</th><th>Status</th><th>Date</th><th></th></tr></thead><tbody id="rows"></tbody></table></div><p id="noRecords">No saved records.</p></section>
-<p id="message" role="status" aria-live="polite"></p>
-</main>
-<dialog id="duplicate"><h2>Duplicate barcode</h2><p>This barcode already has saved records. Choose how to save this item.</p><div class="controls"><button data-choice="cancel">Cancel</button><button data-choice="duplicate">Keep Duplicate</button><button data-choice="replace" class="primary">Replace All for Barcode</button></div></dialog>
-<dialog id="unsaved"><h2>Unsaved product</h2><p>Save the current views before continuing?</p><div class="controls"><button data-choice="cancel">Cancel</button><button data-choice="discard">Discard</button><button data-choice="save" class="primary">Save & Continue</button></div></dialog>
-<dialog id="exportDialog"><h2>Export ready</h2><p id="exportName"></p><p>Choose where to send the file. Download does not open it.</p><div class="controls"><button id="shareFile" class="primary">Share / Choose Destination</button><a id="downloadFile" class="button" download>Download</a><button id="closeExport">Close</button></div></dialog>
-<script src="core.js"></script><script src="exports.js"></script><script src="app.js"></script>
-</body></html>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">PHASE 2B · VERSION 0.8.0</p>
+        <h1>Live Object Frame</h1>
+      </div>
+      <span id="cameraState" class="pill idle">Camera off</span>
+    </header>
+
+    <section class="viewer" id="viewer" aria-label="Live camera preview">
+      <video id="camera" autoplay muted playsinline></video>
+      <canvas id="overlay"></canvas>
+      <div id="emptyState" class="empty-state">
+        <div class="camera-icon" aria-hidden="true"></div>
+        <strong>Camera is not running</strong>
+        <span>Tap Open Camera to begin.</span>
+      </div>
+      <div class="safe-guide" aria-hidden="true"></div>
+      <div id="liveMessage" class="live-message">Place one item near the centre</div>
+      <button id="captureButton" class="capture-fab" type="button" aria-label="Capture object" title="Capture object" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 10.4 2h3.2L15 4h3.5A3.5 3.5 0 0 1 22 7.5v10a3.5 3.5 0 0 1-3.5 3.5h-13A3.5 3.5 0 0 1 2 17.5v-10A3.5 3.5 0 0 1 5.5 4H9Zm3 4a5 5 0 1 0 0 10 5 5 0 0 0 0-10Zm0 2.2a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6Z"/></svg>
+      </button>
+    </section>
+
+    <section class="status-card" aria-live="polite">
+      <div>
+        <span class="label">Detection</span>
+        <strong id="detectionStatus">Waiting for camera</strong>
+      </div>
+      <div>
+        <span class="label">Confidence</span>
+        <strong id="confidence">—</strong>
+      </div>
+      <div>
+        <span class="label">Processing</span>
+        <strong id="fps">—</strong>
+      </div>
+      <div>
+        <span class="label">B&amp;W 5 cm Marker</span>
+        <strong id="markerStatus">Checked after Capture</strong>
+      </div>
+    </section>
+
+    <section class="controls">
+      <button id="startButton" class="primary" type="button">Open Camera</button>
+      <button id="calibrateButton" type="button" disabled>Set Empty Background</button>
+      <button id="detectButton" type="button" disabled>Detect Object</button>
+    </section>
+
+    <section id="captureResult" class="capture-result" hidden>
+      <div class="result-heading">
+        <div>
+          <p class="eyebrow">CAPTURE ANALYSIS</p>
+          <h2>Object captured</h2>
+        </div>
+        <button id="closeResultButton" class="compact" type="button">Close</button>
+      </div>
+      <div id="frameEditorStage" class="frame-editor-stage">
+        <canvas id="frameEditor" aria-label="Captured photo frame editor"></canvas>
+        <p id="editorHint" class="measurement-note">Review the suggested frame. Choose Manual Frame to move or resize it.</p>
+        <div class="editor-toolbar">
+          <button id="useSystemFrame" class="primary" type="button">Use System Frame</button>
+          <button id="manualFrame" type="button">Manual Frame</button>
+          <button id="undoFrame" class="compact" type="button" disabled>Undo</button>
+          <button id="redoFrame" class="compact" type="button" disabled>Redo</button>
+          <button id="resetFrame" class="compact" type="button">Reset</button>
+        </div>
+        <button id="confirmFrame" class="save-button" type="button">Confirm Frame &amp; Measure</button>
+      </div>
+      <img id="capturedPreview" alt="Measured object with frame and dimensions" hidden>
+      <div class="capture-metrics">
+        <div><span>Analysis status</span><strong id="analysisStatus">—</strong></div>
+        <div><span>Reason</span><strong id="analysisReason">—</strong></div>
+        <div><span>Horizontal size</span><strong id="horizontalSize">—</strong></div>
+        <div><span>Vertical size</span><strong id="verticalSize">—</strong></div>
+        <div><span>Reference scale</span><strong id="referenceScale">—</strong></div>
+        <div><span>Object pixels</span><strong id="pixelSize">—</strong></div>
+        <div><span>Camera image</span><strong id="imageSize">—</strong></div>
+        <div><span>Frame coverage</span><strong id="frameCoverage">—</strong></div>
+      </div>
+      <p class="measurement-note">This is a 2D Horizontal × Vertical measurement. After frame confirmation, the annotated image downloads automatically and its filename also contains H and V values. No third dimension is inferred.</p>
+      <a id="downloadCapture" class="download-button fallback-download" download hidden>Download final image again</a>
+    </section>
+
+    <details class="settings">
+      <summary>Detection settings</summary>
+      <label>
+        <span>Foreground sensitivity</span>
+        <output id="thresholdValue">42</output>
+        <input id="threshold" type="range" min="20" max="90" value="38" step="1">
+      </label>
+      <label>
+        <span>Minimum object size</span>
+        <output id="areaValue">0.2%</output>
+        <input id="minArea" type="range" min="1" max="50" value="2" step="1">
+      </label>
+    </details>
+
+    <section class="instructions">
+      <h2>First test</h2>
+      <ol>
+        <li>Print the black-and-white 5 cm marker at 100% / Actual Size.</li>
+        <li>Tap <b>Open Camera</b>, point at the empty background and choose the final phone position.</li>
+        <li>While the scene is empty, tap <b>Set Empty Background</b> and keep the phone still.</li>
+        <li>Place the item and one marker in the same plane, then tap <b>Detect Object</b>.</li>
+        <li>Make sure the green frame contains the complete item. Keep the marker visible elsewhere inside the camera view.</li>
+        <li>If the live item frame does not appear, Capture is still available and the photo will be analysed after shooting.</li>
+        <li>Tap the round Camera icon.</li>
+        <li>The captured photo is then analysed for the marker and item separately.</li>
+      </ol>
+    </section>
+  </main>
+
+  <canvas id="processingCanvas" hidden></canvas>
+  <script src="app.js?v=0.8.0" defer></script>
+</body>
+</html>
