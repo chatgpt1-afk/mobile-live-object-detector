@@ -42,13 +42,13 @@ document.querySelector('#rotatePhotoRight').addEventListener('click',()=>rotateP
 function drawCrop(){if(!productPhotoCanvas)return;cropCtx.clearRect(0,0,cropCanvas.width,cropCanvas.height);cropCtx.drawImage(productPhotoCanvas,0,0);if(cropRect){cropCtx.strokeStyle='#3b82f6';cropCtx.lineWidth=Math.max(2,cropCanvas.width/400);cropCtx.strokeRect(cropRect.x,cropRect.y,cropRect.w,cropRect.h);}}
 document.querySelector('#cropProductPhoto').addEventListener('click',async()=>{
  if(!productPhotoBlob)return;const bmp=await createImageBitmap(productPhotoBlob);productPhotoCanvas=document.createElement('canvas');productPhotoCanvas.width=bmp.width;productPhotoCanvas.height=bmp.height;productPhotoCanvas.getContext('2d').drawImage(bmp,0,0);bmp.close?.();
- cropCanvas.width=productPhotoCanvas.width;cropCanvas.height=productPhotoCanvas.height;cropRect=null;cropStage.hidden=false;document.querySelector('#applyProductCrop').hidden=false;document.querySelector('#cancelProductCrop').hidden=false;drawCrop();
+ cropCanvas.width=productPhotoCanvas.width;cropCanvas.height=productPhotoCanvas.height;cropRect=null;cropStage.hidden=false;document.querySelector('#cropPhotoActions').hidden=false;document.querySelector('#applyProductCrop').hidden=false;document.querySelector('#cancelProductCrop').hidden=false;drawCrop();
 });
 function cropPoint(e){const r=cropCanvas.getBoundingClientRect();return{x:(e.clientX-r.left)*cropCanvas.width/r.width,y:(e.clientY-r.top)*cropCanvas.height/r.height};}
 cropCanvas.addEventListener('pointerdown',e=>{cropStart=cropPoint(e);cropCanvas.setPointerCapture(e.pointerId);});
 cropCanvas.addEventListener('pointermove',e=>{if(!cropStart)return;const q=cropPoint(e);cropRect={x:Math.max(0,Math.min(q.x,cropStart.x)),y:Math.max(0,Math.min(q.y,cropStart.y)),w:Math.abs(q.x-cropStart.x),h:Math.abs(q.y-cropStart.y)};drawCrop();});
 cropCanvas.addEventListener('pointerup',()=>{cropStart=null;});
-function closeCrop(){cropStage.hidden=true;document.querySelector('#applyProductCrop').hidden=true;document.querySelector('#cancelProductCrop').hidden=true;}
+function closeCrop(){cropStage.hidden=true;document.querySelector('#cropPhotoActions').hidden=true;document.querySelector('#applyProductCrop').hidden=true;document.querySelector('#cancelProductCrop').hidden=true;}
 document.querySelector('#cancelProductCrop').addEventListener('click',closeCrop);
 document.querySelector('#applyProductCrop').addEventListener('click',async()=>{if(!cropRect||cropRect.w<5||cropRect.h<5)return;const c=document.createElement('canvas');c.width=Math.round(cropRect.w);c.height=Math.round(cropRect.h);c.getContext('2d').drawImage(productPhotoCanvas,cropRect.x,cropRect.y,cropRect.w,cropRect.h,0,0,c.width,c.height);await updateProductPhotoFromCanvas(c);closeCrop();});
 productPhotoInput.addEventListener('change',setProductPhoto);
@@ -604,6 +604,19 @@ function showHome() {
   homePage.hidden = false;
 }
 
+// Validate retail GTIN check digits before accepting a scan. Other symbologies
+// are accepted only after repeated identical readings and user confirmation.
+function validRetailBarcode(value, format) {
+  const lengths = {ean_13:13,ean_8:8,upc_a:12,upc_e:8,itf:0};
+  if (!(format in lengths) || format === 'itf') return true;
+  if (!/^\d+$/.test(value) || value.length !== lengths[format]) return false;
+  // UPC-E is compressed and needs expansion to check its digit.
+  if (format === 'upc_e') return true;
+  let sum = 0;
+  for (let i=value.length-2, weight=3;i>=0;i--,weight=weight===3?1:3) sum+=Number(value[i])*weight;
+  return (10-sum%10)%10 === Number(value.at(-1));
+}
+
 async function startBarcodeScan() {
   if (!("BarcodeDetector" in window)) {
     barcodeMessage.textContent = "Barcode scanning is not supported by this browser. Please key in the barcode.";
@@ -611,14 +624,11 @@ async function startBarcodeScan() {
   }
   try {
     const formats = await BarcodeDetector.getSupportedFormats();
-    const detector = formats.length ? new BarcodeDetector({ formats }) : new BarcodeDetector();
-    if (running && stream) {
-      barcodeVideo.srcObject = stream;
-    } else {
-      barcodeStream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: { facingMode: { ideal: "environment" } }
-      });
+    const preferred = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf'].filter(f=>formats.includes(f));
+    const detector = preferred.length ? new BarcodeDetector({formats:preferred}) : new BarcodeDetector();
+    if (running && stream) barcodeVideo.srcObject = stream;
+    else {
+      barcodeStream = await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:"environment"}}});
       barcodeVideo.srcObject = barcodeStream;
     }
     await barcodeVideo.play();
@@ -626,19 +636,28 @@ async function startBarcodeScan() {
     scanBarcodeButton.hidden = true;
     stopBarcodeScanButton.hidden = false;
     barcodeScanRunning = true;
-    barcodeMessage.textContent = "Point the camera at one barcode and hold still.";
+    barcodeMessage.textContent = "Hold the barcode steady until the same number is detected 3 times.";
+    let previous = '', matches = 0;
     const scan = async () => {
       if (!barcodeScanRunning) return;
       try {
         const results = await detector.detect(barcodeVideo);
-        if (results.length) {
-          barcodeInput.value = results[0].rawValue;
-          barcodeMessage.textContent = `Barcode detected: ${results[0].rawValue}`;
-          stopBarcodeScan();
-          return;
-        }
-      } catch (_) {}
-      requestAnimationFrame(scan);
+        // Never arbitrarily take results[0] when multiple different codes appear.
+        const candidates = [...new Map(results.filter(r=>validRetailBarcode(r.rawValue,r.format)).map(r=>[r.format+':'+r.rawValue,r])).values()];
+        if (candidates.length === 1) {
+          const candidate = candidates[0];
+          const key = candidate.format+':'+candidate.rawValue;
+          matches = key === previous ? matches+1 : 1;
+          previous = key;
+          if (matches >= 3) {
+            barcodeInput.value = candidate.rawValue; // text, preserve leading zeros
+            barcodeMessage.textContent = `Detected ${candidate.format}: ${candidate.rawValue}. Check the printed barcode number before Continue; edit it if needed.`;
+            stopBarcodeScan();
+            return;
+          }
+        } else { previous = ''; matches = 0; }
+      } catch (_) { previous = ''; matches = 0; }
+      if (barcodeScanRunning) requestAnimationFrame(scan);
     };
     requestAnimationFrame(scan);
   } catch (error) {

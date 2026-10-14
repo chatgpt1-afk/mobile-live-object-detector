@@ -1,2 +1,1 @@
-# v0.14.1
-Pinch to zoom; two-finger pan; drag outside frames to pan while zoomed; mouse wheel zoom around pointer. Frame dimensions remain in original pixels. No zoom slider. Deploy with ?v=0141.
+v0.14.3: Simplified Rotate controls. Barcode scan now waits for 3 consistent detections, rejects invalid EAN-13/EAN-8/UPC-A checksums, and requires visual verification before Continue.
