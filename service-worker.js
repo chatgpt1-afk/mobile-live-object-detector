@@ -1,9 +1,9 @@
-const CACHE_NAME = "live-object-frame-0.14.3";
+const CACHE_NAME = "live-object-frame-0.14.4";
 const APP_FILES = [
   "./",
   "index.html",
-  "styles.css?v=0.14.3",
-  "app.js?v=0.14.3",
+  "styles.css?v=0.14.4",
+  "app.js?v=0.14.4",
   "manifest.webmanifest",
   "icon.svg",
   "reference/5cm_reference_marker.pdf",

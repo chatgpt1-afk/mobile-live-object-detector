@@ -39,16 +39,74 @@ async function rotateProductPhoto(clockwise){
 }
 document.querySelector('#rotatePhotoLeft').addEventListener('click',()=>rotateProductPhoto(false));
 document.querySelector('#rotatePhotoRight').addEventListener('click',()=>rotateProductPhoto(true));
-function drawCrop(){if(!productPhotoCanvas)return;cropCtx.clearRect(0,0,cropCanvas.width,cropCanvas.height);cropCtx.drawImage(productPhotoCanvas,0,0);if(cropRect){cropCtx.strokeStyle='#3b82f6';cropCtx.lineWidth=Math.max(2,cropCanvas.width/400);cropCtx.strokeRect(cropRect.x,cropRect.y,cropRect.w,cropRect.h);}}
+// Crop uses the same eight resize handles and drag-to-move behavior as Manual Item Frame.
+let cropGesture=null;
+function cropHandles(r){
+ const x=r.x,y=r.y,w=r.w,h=r.h;
+ return [{name:'nw',x,y},{name:'n',x:x+w/2,y},{name:'ne',x:x+w,y},{name:'e',x:x+w,y:y+h/2},{name:'se',x:x+w,y:y+h},{name:'s',x:x+w/2,y:y+h},{name:'sw',x,y:y+h},{name:'w',x,y:y+h/2}];
+}
+function drawCrop(){
+ if(!productPhotoCanvas)return;
+ cropCtx.clearRect(0,0,cropCanvas.width,cropCanvas.height);
+ cropCtx.drawImage(productPhotoCanvas,0,0);
+ if(!cropRect)return;
+ const r=cropRect;
+ cropCtx.fillStyle='rgba(0,0,0,.35)';
+ cropCtx.fillRect(0,0,cropCanvas.width,r.y);
+ cropCtx.fillRect(0,r.y+r.h,cropCanvas.width,cropCanvas.height-r.y-r.h);
+ cropCtx.fillRect(0,r.y,r.x,r.h);
+ cropCtx.fillRect(r.x+r.w,r.y,cropCanvas.width-r.x-r.w,r.h);
+ cropCtx.strokeStyle='#54e38e';cropCtx.lineWidth=Math.max(3,cropCanvas.width/300);
+ cropCtx.strokeRect(r.x,r.y,r.w,r.h);
+ const size=Math.max(14,cropCanvas.width/40);
+ cropCtx.fillStyle='#fff';cropCtx.strokeStyle='#0a7d43';cropCtx.lineWidth=Math.max(2,cropCanvas.width/500);
+ for(const h of cropHandles(r)){
+  cropCtx.fillRect(h.x-size/2,h.y-size/2,size,size);
+  cropCtx.strokeRect(h.x-size/2,h.y-size/2,size,size);
+ }
+}
 document.querySelector('#cropProductPhoto').addEventListener('click',async()=>{
- if(!productPhotoBlob)return;const bmp=await createImageBitmap(productPhotoBlob);productPhotoCanvas=document.createElement('canvas');productPhotoCanvas.width=bmp.width;productPhotoCanvas.height=bmp.height;productPhotoCanvas.getContext('2d').drawImage(bmp,0,0);bmp.close?.();
- cropCanvas.width=productPhotoCanvas.width;cropCanvas.height=productPhotoCanvas.height;cropRect=null;cropStage.hidden=false;document.querySelector('#cropPhotoActions').hidden=false;document.querySelector('#applyProductCrop').hidden=false;document.querySelector('#cancelProductCrop').hidden=false;drawCrop();
+ if(!productPhotoBlob)return;
+ const bmp=await createImageBitmap(productPhotoBlob);
+ productPhotoCanvas=document.createElement('canvas');productPhotoCanvas.width=bmp.width;productPhotoCanvas.height=bmp.height;
+ productPhotoCanvas.getContext('2d').drawImage(bmp,0,0);bmp.close?.();
+ cropCanvas.width=productPhotoCanvas.width;cropCanvas.height=productPhotoCanvas.height;
+ const margin=.1;cropRect={x:cropCanvas.width*margin,y:cropCanvas.height*margin,w:cropCanvas.width*(1-2*margin),h:cropCanvas.height*(1-2*margin)};
+ cropStage.hidden=false;document.querySelector('#cropPhotoActions').hidden=false;
+ document.querySelector('#applyProductCrop').hidden=false;document.querySelector('#cancelProductCrop').hidden=false;
+ drawCrop();
 });
 function cropPoint(e){const r=cropCanvas.getBoundingClientRect();return{x:(e.clientX-r.left)*cropCanvas.width/r.width,y:(e.clientY-r.top)*cropCanvas.height/r.height};}
-cropCanvas.addEventListener('pointerdown',e=>{cropStart=cropPoint(e);cropCanvas.setPointerCapture(e.pointerId);});
-cropCanvas.addEventListener('pointermove',e=>{if(!cropStart)return;const q=cropPoint(e);cropRect={x:Math.max(0,Math.min(q.x,cropStart.x)),y:Math.max(0,Math.min(q.y,cropStart.y)),w:Math.abs(q.x-cropStart.x),h:Math.abs(q.y-cropStart.y)};drawCrop();});
-cropCanvas.addEventListener('pointerup',()=>{cropStart=null;});
-function closeCrop(){cropStage.hidden=true;document.querySelector('#cropPhotoActions').hidden=true;document.querySelector('#applyProductCrop').hidden=true;document.querySelector('#cancelProductCrop').hidden=true;}
+cropCanvas.addEventListener('pointerdown',e=>{
+ if(!cropRect)return;
+ e.preventDefault();const pt=cropPoint(e),r=cropRect;
+ const bounds=cropCanvas.getBoundingClientRect(),tol=26*cropCanvas.width/bounds.width;
+ const handle=cropHandles(r).find(h=>Math.hypot(pt.x-h.x,pt.y-h.y)<=tol);
+ const inside=pt.x>=r.x&&pt.x<=r.x+r.w&&pt.y>=r.y&&pt.y<=r.y+r.h;
+ if(!handle&&!inside)return;
+ cropGesture={id:e.pointerId,type:handle?.name||'move',start:pt,rect:{...r}};
+ cropCanvas.setPointerCapture(e.pointerId);
+});
+cropCanvas.addEventListener('pointermove',e=>{
+ if(!cropGesture||cropGesture.id!==e.pointerId)return;
+ e.preventDefault();const pt=cropPoint(e),g=cropGesture,dx=pt.x-g.start.x,dy=pt.y-g.start.y;
+ const W=cropCanvas.width,H=cropCanvas.height,min=Math.max(8,Math.min(W,H)*.025);
+ let l=g.rect.x,t=g.rect.y,r=l+g.rect.w,b=t+g.rect.h;
+ if(g.type==='move'){
+  l=Math.max(0,Math.min(W-g.rect.w,l+dx));t=Math.max(0,Math.min(H-g.rect.h,t+dy));
+  r=l+g.rect.w;b=t+g.rect.h;
+ }else{
+  if(g.type.includes('w'))l=Math.max(0,Math.min(r-min,l+dx));
+  if(g.type.includes('e'))r=Math.min(W,Math.max(l+min,r+dx));
+  if(g.type.includes('n'))t=Math.max(0,Math.min(b-min,t+dy));
+  if(g.type.includes('s'))b=Math.min(H,Math.max(t+min,b+dy));
+ }
+ cropRect={x:l,y:t,w:r-l,h:b-t};drawCrop();
+});
+function endCropGesture(e){if(cropGesture?.id!==e.pointerId)return;cropGesture=null;if(cropCanvas.hasPointerCapture(e.pointerId))cropCanvas.releasePointerCapture(e.pointerId);}
+cropCanvas.addEventListener('pointerup',endCropGesture);
+cropCanvas.addEventListener('pointercancel',endCropGesture);
+function closeCrop(){cropGesture=null;cropStage.hidden=true;document.querySelector('#cropPhotoActions').hidden=true;document.querySelector('#applyProductCrop').hidden=true;document.querySelector('#cancelProductCrop').hidden=true;}
 document.querySelector('#cancelProductCrop').addEventListener('click',closeCrop);
 document.querySelector('#applyProductCrop').addEventListener('click',async()=>{if(!cropRect||cropRect.w<5||cropRect.h<5)return;const c=document.createElement('canvas');c.width=Math.round(cropRect.w);c.height=Math.round(cropRect.h);c.getContext('2d').drawImage(productPhotoCanvas,cropRect.x,cropRect.y,cropRect.w,cropRect.h,0,0,c.width,c.height);await updateProductPhotoFromCanvas(c);closeCrop();});
 productPhotoInput.addEventListener('change',setProductPhoto);

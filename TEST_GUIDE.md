@@ -1,1 +1,1 @@
-Scan a known EAN-13 with a leading zero, check digits and printed number. Scan with two barcodes in view (should not choose arbitrarily). Test rotate and crop.
+Test: capture item photo -> Crop Image -> drag center, drag all eight handles, Apply Crop -> confirm preview. Cancel Crop should preserve original. Test on mobile and desktop.

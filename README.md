@@ -1,1 +1,1 @@
-v0.14.3: Simplified Rotate controls. Barcode scan now waits for 3 consistent detections, rejects invalid EAN-13/EAN-8/UPC-A checksums, and requires visual verification before Continue.
+v0.14.4: Product Identification crop editor now supports dragging and resizing a green 8-handle crop frame, like Manual Item Frame. All other functions retained.
