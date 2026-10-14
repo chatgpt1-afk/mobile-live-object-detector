@@ -59,6 +59,9 @@ const shotIndicator = document.querySelector('#shotIndicator');
 const dualStatus = document.querySelector('#dualStatus');
 const combinedDimensions = document.querySelector('#combinedDimensions');
 const saveDualItem = document.querySelector('#saveDualItem');
+const newDualItem = document.querySelector('#newDualItem');
+let dualRecordSaved = false;
+let dualRecordSaving = false;
 let activeShot = 0;
 let dualShots = [null, null];
 let dualPlacement = 'upright';
@@ -85,7 +88,10 @@ function refreshDual(){
   itemPlacement.disabled=!!dualShots[0] || !!dualShots[1];
   const d=dualDimensions();
   combinedDimensions.textContent=`Length ${d.length?.toFixed(2)??'—'} · Width ${d.width?.toFixed(2)??'—'} · Height ${d.height?.toFixed(2)??'—'} cm`;
-  saveDualItem.disabled=!dualShots[0] || (!dualShots[1] && shotView.value!=='blank');
+  saveDualItem.disabled=dualRecordSaved || dualRecordSaving || !dualShots[0] || (!dualShots[1] && shotView.value!=='blank');
+  saveDualItem.textContent=dualRecordSaved?'Saved':(dualRecordSaving?'Saving...':'Save Both Images');
+  newDualItem.hidden=!dualRecordSaved;
+  if(dualRecordSaved){dualStatus.textContent='Saved successfully. Tap New Item to measure another product.';return;}
   dualStatus.textContent=dualShots[activeShot]?`Image ${activeShot+1} confirmed (${dualShots[activeShot].view}). You can retake it.`:`Image ${activeShot+1}: ${activeShot===1&&shotView.value==='blank'?'No second image required; dimensions will remain incomplete.':'Capture, adjust frame, then confirm.'}`;
 }
 function showShot(index){
@@ -115,7 +121,7 @@ function showShot(index){
 }
 function resetDual(){
   for(const shot of dualShots)if(shot?.previewUrl)URL.revokeObjectURL(shot.previewUrl);
-  dualShots=[null,null];activeShot=0;dualPlacement=itemPlacement.value;
+  dualShots=[null,null];activeShot=0;dualPlacement=itemPlacement.value;dualRecordSaved=false;dualRecordSaving=false;
   shotView.value='front';refreshDual();
 }
 itemPlacement.addEventListener('change',()=>{dualPlacement=itemPlacement.value;refreshDual();});
@@ -126,10 +132,12 @@ let swipeStart=null;
 document.querySelector('#captureResult').addEventListener('touchstart',e=>{swipeStart={x:e.touches[0].clientX,y:e.touches[0].clientY};},{passive:true});
 document.querySelector('#captureResult').addEventListener('touchend',e=>{if(!swipeStart)return;const dx=e.changedTouches[0].clientX-swipeStart.x,dy=e.changedTouches[0].clientY-swipeStart.y;swipeStart=null;if(Math.abs(dx)>90&&Math.abs(dx)>Math.abs(dy)*1.5)showShot(dx<0?1:0);},{passive:true});
 async function saveDualRecord(){
+  if(dualRecordSaved || dualRecordSaving)return;
   const dims=dualDimensions();
   if(!dualShots[0])return;
   if(!dualShots[1]&&shotView.value!=='blank')return;
   if(!currentProductPhotoBlob){dualStatus.textContent='Item photo required. Return to barcode step.';return;}
+  dualRecordSaving=true;refreshDual();
   const productPhotoId=crypto.randomUUID?crypto.randomUUID():`photo-${Date.now()}`;
   await saveItemImage(productPhotoId,`${currentBarcode}_product.jpg`,currentProductPhotoBlob);
   const record={productPhotoId,barcode:currentBarcode,placement:dualPlacement,lengthCm:dims.length,widthCm:dims.width,heightCm:dims.height,status:Object.values(dims).some(v=>v===null)?'Review Required':'Complete',measuredAt:new Date().toISOString(),shots:[]};
@@ -142,11 +150,13 @@ async function saveDualRecord(){
   }
   measurementRecords.push(record);
   localStorage.setItem('object-measurement-records-v1',JSON.stringify(measurementRecords));
-  updateHistoryCount();saveDualItem.disabled=true;
-  dualStatus.textContent=record.status==='Complete'?'Both images saved as one item record.':'Saved with Review Required: missing dimension.';
+  updateHistoryCount();
   currentMeasurement={...dualShots[activeShot],saved:true};
+  dualRecordSaved=true;dualRecordSaving=false;refreshDual();
+  if(record.status!=='Complete')dualStatus.textContent='Saved (Review Required: missing dimension). Tap New Item to continue.';
 }
-saveDualItem.addEventListener('click',()=>saveDualRecord().catch(e=>{dualStatus.textContent=`Save failed: ${e.message}`;}));
+saveDualItem.addEventListener('click',()=>saveDualRecord().catch(e=>{dualRecordSaving=false;refreshDual();dualStatus.textContent=`Save failed: ${e.message}`;}));
+newDualItem.addEventListener('click',()=>{if(!dualRecordSaved)return;prepareForNextBarcode();});
 
 const overlay = document.querySelector("#overlay");
 const overlayCtx = overlay.getContext("2d");
