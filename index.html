@@ -9,11 +9,11 @@
   <title>Live Object Frame</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=0.12.4">
+  <link rel="stylesheet" href="styles.css?v=0.13.1">
 </head>
 <body>
   <main id="homePage" class="home-page">
-    <p class="eyebrow">OBJECT MEASUREMENT · VERSION 0.12.4</p>
+    <p class="eyebrow">OBJECT MEASUREMENT · VERSION 0.13.1</p>
     <h1>Measure products with your phone</h1>
     <p>Frame one product with the printed reference marker, confirm the object frame, then save the measurement.</p>
     <button id="startMeasurementButton" class="primary" type="button">Start Measurement</button>
@@ -23,7 +23,7 @@
   <main id="measurementPage" class="app-shell" hidden>
     <header class="topbar">
       <div>
-        <p class="eyebrow">PHASE 2B · VERSION 0.12.4</p>
+        <p class="eyebrow">PHASE 2B · VERSION 0.13.1</p>
         <h1>Live Object Frame</h1>
       </div>
       <div class="header-actions">
@@ -74,7 +74,7 @@
       </div>
     </section>
 
-    <section id="captureResult" class="capture-result" hidden>
+    <section class="dual-config"><label>Item Placement <select id="itemPlacement"><option value="upright">Upright / 竖着</option><option value="horizontal">Horizontal / 横着</option></select></label><div class="dual-nav"><button id="previousShot" type="button">← First image</button><strong id="shotIndicator">Image 1 / 2</strong><button id="nextShot" type="button">Second image →</button></div><label>Current Image View <select id="shotView"><option value="front">Front view</option><option value="side">Side view</option><option value="top">Top view</option><option value="blank">Blank (second only)</option></select></label><p id="dualStatus" class="measurement-note">Capture and confirm the first image, then move to the second.</p><div id="combinedDimensions" class="dual-summary">Length — · Width — · Height —</div><button id="saveDualItem" type="button" class="primary" disabled>Save Item (both images)</button></section><section id="captureResult" class="capture-result" hidden>
       <div class="result-heading">
         <div>
           <p class="eyebrow">CAPTURE ANALYSIS</p>
@@ -106,7 +106,7 @@
         <div><span>Camera image</span><strong id="imageSize">—</strong></div>
         <div><span>Frame coverage</span><strong id="frameCoverage">—</strong></div>
       </div>
-      <p class="measurement-note">This is a 2D Horizontal × Vertical measurement. After frame confirmation, the annotated image downloads automatically and its filename also contains H and V values. No third dimension is inferred.</p>
+      <p class="measurement-note">Each confirmed image contributes two dimensions. Use the navigation above to capture or review the other image. Save Item stores both images together.</p>
       <button id="saveCurrentRecordButton" type="button" hidden>Save Current Record</button>
       <button id="nextItemButton" class="primary next-item-button" type="button" hidden>Next Item</button>
     </section>
@@ -207,6 +207,6 @@
   </dialog>
 
   <canvas id="processingCanvas" hidden></canvas>
-  <script src="app.js?v=0.12.4" defer></script>
+  <script src="app.js?v=0.13.1" defer></script>
 </body>
 </html>

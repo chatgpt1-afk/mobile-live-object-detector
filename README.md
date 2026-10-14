@@ -1,7 +1,9 @@
-# Mobile Detector On Item v0.12.4
+# Mobile Detector On Item v0.13.1 — Dual View
 
-Updated Manual Marker: tap Manual Marker to show a draggable blue rectangular frame, drag inside to move and drag the eight handles to resize. Tap Confirm Frame & Measure to apply the calibration and measure. Existing Manual Frame remains available.
+One barcode, two capture slots. Choose Upright or Horizontal before measuring. Image 1 is Front. Image 2 is Side, Top, or Blank. Confirm each capture with Manual Frame and Manual Marker as needed. Use arrows or swipe on capture result to switch. Save Item writes one record with two image entries, and Excel export contains Image Details and Item Dimensions sheets.
 
-Select 5, 10, or 15 cm according to the printed marker. The blue frame should match the OUTER PRINTED MARKER square, not the A4 paper edge. This rectangular tool approximates perspective; strongly skewed markers may still give inaccurate results.
+For Blank second image, the missing dimension is saved empty and status Review Required. Never invent a third dimension. Both photos use the same barcode, with placement/view included in image filenames. Images are kept in local IndexedDB until exported.
 
-This version has passed JavaScript syntax validation but has not been tested on a physical phone.
+Use GitHub Pages URL with ?v=0130 after replacing all files. Check the displayed version 0.13.1. The app is not yet validated on a physical phone.
+
+Version 0.13.1: Item Dimensions Excel sheet now embeds the cropped Front View image in the Front Photo column. Photos are stored in the XLSX itself and not merely linked.

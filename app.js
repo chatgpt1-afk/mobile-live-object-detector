@@ -1,6 +1,97 @@
 "use strict";
 
 const video = document.querySelector("#camera");
+const itemPlacement = document.querySelector('#itemPlacement');
+const shotView = document.querySelector('#shotView');
+const shotIndicator = document.querySelector('#shotIndicator');
+const dualStatus = document.querySelector('#dualStatus');
+const combinedDimensions = document.querySelector('#combinedDimensions');
+const saveDualItem = document.querySelector('#saveDualItem');
+let activeShot = 0;
+let dualShots = [null, null];
+let dualPlacement = 'upright';
+const viewAxes = {
+  upright: {front:['length','height'],side:['width','height'],top:['length','width']},
+  horizontal: {front:['length','width'],side:['height','width'],top:['length','height']}
+};
+function currentShotView(){return activeShot===0?'front':shotView.value;}
+function dualDimensions(){
+  const dims = {length:[],width:[],height:[]};
+  for (const shot of dualShots) {
+    if(!shot || shot.view==='blank')continue;
+    const axes=viewAxes[dualPlacement][shot.view];
+    dims[axes[0]].push(shot.horizontalCm);
+    dims[axes[1]].push(shot.verticalCm);
+  }
+  return Object.fromEntries(Object.entries(dims).map(([k,v])=>[k,v.length?Math.max(...v):null]));
+}
+function refreshDual(){
+  shotIndicator.textContent=`Image ${activeShot+1} / 2`;
+  shotView.value=activeShot===0?'front':(dualShots[1]?.view || (shotView.value==='front' ? 'side' : shotView.value));
+  [...shotView.options].forEach(o=>o.disabled=activeShot===0?o.value!=='front':o.value==='front');
+  shotView.disabled=activeShot===0;
+  itemPlacement.disabled=!!dualShots[0] || !!dualShots[1];
+  const d=dualDimensions();
+  combinedDimensions.textContent=`Length ${d.length?.toFixed(2)??'—'} · Width ${d.width?.toFixed(2)??'—'} · Height ${d.height?.toFixed(2)??'—'} cm`;
+  saveDualItem.disabled=!dualShots[0] || (!dualShots[1] && shotView.value!=='blank');
+  dualStatus.textContent=dualShots[activeShot]?`Image ${activeShot+1} confirmed (${dualShots[activeShot].view}). You can retake it.`:`Image ${activeShot+1}: ${activeShot===1&&shotView.value==='blank'?'No second image required; dimensions will remain incomplete.':'Capture, adjust frame, then confirm.'}`;
+}
+function showShot(index){
+  if(index<0||index>1)return;
+  activeShot=index;
+  const shot=dualShots[index];
+  if(shot){
+    capturedFullCanvas=shot.canvas;
+    capturedMarker=shot.marker;
+    editableFrame={...shot.frame};
+    systemFrame={...shot.frame};
+    currentMeasurement={...shot};
+    currentItemImageBlob=shot.blob;
+    capturedPreview.hidden=false;
+    capturedPreview.src=shot.previewUrl;
+    frameEditorStage.hidden=true;
+    captureResult.hidden=false;
+    horizontalSize.textContent=`${shot.horizontalCm.toFixed(2)} cm`;
+    verticalSize.textContent=`${shot.verticalCm.toFixed(2)} cm`;
+    analysisStatus.textContent='MEASURED';
+  }else{
+    captureResult.hidden=true;
+    currentMeasurement=null;
+    capturedPreview.hidden=true;
+  }
+  refreshDual();
+}
+function resetDual(){
+  for(const shot of dualShots)if(shot?.previewUrl)URL.revokeObjectURL(shot.previewUrl);
+  dualShots=[null,null];activeShot=0;dualPlacement=itemPlacement.value;
+  shotView.value='front';refreshDual();
+}
+itemPlacement.addEventListener('change',()=>{dualPlacement=itemPlacement.value;refreshDual();});
+shotView.addEventListener('change',()=>{if(activeShot===1&&dualShots[1]){dualShots[1].view=shotView.value;}refreshDual();});
+document.querySelector('#previousShot').addEventListener('click',()=>showShot(0));
+document.querySelector('#nextShot').addEventListener('click',()=>showShot(1));
+let swipeStart=null;
+document.querySelector('#captureResult').addEventListener('touchstart',e=>{swipeStart={x:e.touches[0].clientX,y:e.touches[0].clientY};},{passive:true});
+document.querySelector('#captureResult').addEventListener('touchend',e=>{if(!swipeStart)return;const dx=e.changedTouches[0].clientX-swipeStart.x,dy=e.changedTouches[0].clientY-swipeStart.y;swipeStart=null;if(Math.abs(dx)>90&&Math.abs(dx)>Math.abs(dy)*1.5)showShot(dx<0?1:0);},{passive:true});
+async function saveDualRecord(){
+  const dims=dualDimensions();
+  if(!dualShots[0])return;
+  if(!dualShots[1]&&shotView.value!=='blank')return;
+  const record={barcode:currentBarcode,placement:dualPlacement,lengthCm:dims.length,widthCm:dims.width,heightCm:dims.height,status:Object.values(dims).some(v=>v===null)?'Review Required':'Complete',measuredAt:new Date().toISOString(),shots:[]};
+  for(let i=0;i<2;i++){
+    const shot=dualShots[i];if(!shot)continue;
+    const id=crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${i}`;
+    await saveItemImage(id,shot.itemImageFilename,shot.blob);
+    record.shots.push({view:shot.view,placement:dualPlacement,horizontalCm:shot.horizontalCm,verticalCm:shot.verticalCm,imageId:id,imageFilename:shot.itemImageFilename,frameType:shot.frameType});
+  }
+  measurementRecords.push(record);
+  localStorage.setItem('object-measurement-records-v1',JSON.stringify(measurementRecords));
+  updateHistoryCount();saveDualItem.disabled=true;
+  dualStatus.textContent=record.status==='Complete'?'Both images saved as one item record.':'Saved with Review Required: missing dimension.';
+  currentMeasurement={...dualShots[activeShot],saved:true};
+}
+saveDualItem.addEventListener('click',()=>saveDualRecord().catch(e=>{dualStatus.textContent=`Save failed: ${e.message}`;}));
+
 const overlay = document.querySelector("#overlay");
 const overlayCtx = overlay.getContext("2d");
 const workCanvas = document.querySelector("#processingCanvas");
@@ -322,7 +413,7 @@ homeHistoryButton.addEventListener("click", openHistory);
 homeButton.addEventListener("click", () => requestRecordDecision("home"));
 scanBarcodeButton.addEventListener("click", startBarcodeScan);
 stopBarcodeScanButton.addEventListener("click", stopBarcodeScan);
-saveCurrentRecordButton.addEventListener("click", saveCurrentRecordWithoutLeaving);
+saveCurrentRecordButton.addEventListener("click", () => { dualStatus.textContent="Use Save Item (both images) above."; });
 nextItemButton.addEventListener("click", () => requestRecordDecision("next"));
 saveRecordButton.addEventListener("click", () => finishRecordDecision(true));
 skipSaveButton.addEventListener("click", () => finishRecordDecision(false));
@@ -367,6 +458,7 @@ function acceptBarcode(event) {
 }
 
 function useBarcode(value) {
+  resetDual();
   currentBarcode = value;
   currentMeasurement = null;
   currentItemImageBlob = null;
@@ -399,7 +491,7 @@ async function resolveDuplicateBarcode(action) {
   }
   if (action === "replace") {
     const removed = measurementRecords.filter(record => record.barcode === pendingBarcode);
-    await Promise.allSettled(removed.filter(record => record.imageId).map(record => deleteItemImage(record.imageId)));
+    await Promise.allSettled(removed.flatMap(record => [record.imageId,...(record.shots||[]).map(s=>s.imageId)].filter(Boolean)).map(deleteItemImage));
     measurementRecords = measurementRecords.filter(record => record.barcode !== pendingBarcode);
     localStorage.setItem("object-measurement-records-v1", JSON.stringify(measurementRecords));
     updateHistoryCount();
@@ -1057,7 +1149,7 @@ async function confirmFrameAndMeasure() {
     0, 0, itemCanvas.width, itemCanvas.height
   );
   currentItemImageBlob = await canvasToBlob(itemCanvas, 0.94);
-  const measurementFilename = `${safeBarcode}_H-${horizontalCm.toFixed(2)}cm_V-${verticalCm.toFixed(2)}cm_${date}.jpg`;
+  const measurementFilename = `${safeBarcode}_${dualPlacement}_${currentShotView()}_H-${horizontalCm.toFixed(2)}cm_V-${verticalCm.toFixed(2)}cm_${date}.jpg`;
   const itemImageFilename = measurementFilename;
   const output = document.createElement("canvas");
   output.width = capturedFullCanvas.width;
@@ -1110,11 +1202,13 @@ async function confirmFrameAndMeasure() {
     itemImageFilename,
     saved: false
   };
-  saveCurrentRecordButton.hidden = false;
+  saveCurrentRecordButton.hidden = true;
   saveCurrentRecordButton.disabled = false;
   saveCurrentRecordButton.textContent = "Save Current Record";
-  nextItemButton.hidden = false;
-  downloadBlob(capturedBlob, capturedFilename);
+  nextItemButton.hidden = true;
+  if(dualShots[activeShot]?.previewUrl)URL.revokeObjectURL(dualShots[activeShot].previewUrl);
+  dualShots[activeShot]={...currentMeasurement,view:currentShotView(),placement:dualPlacement,canvas:capturedFullCanvas,marker:capturedMarker,frame:{...editableFrame},blob:currentItemImageBlob,previewUrl:URL.createObjectURL(capturedBlob)};
+  refreshDual();
 }
 
 function downloadBlob(blob, filename) {
@@ -1127,6 +1221,7 @@ function downloadBlob(blob, filename) {
 }
 
 function requestRecordDecision(action) {
+  if(dualShots.some(Boolean) && !currentMeasurement?.saved){dualStatus.textContent="Save Item (both images) before leaving, or retake the images.";return;}
   if (!currentMeasurement) {
     if (action === "history") openHistory();
     else if (action === "home") showHome();
@@ -1240,10 +1335,10 @@ function renderHistory() {
     numberCell.textContent = index + 1;
     row.appendChild(numberCell);
     const imageCell = document.createElement("td");
-    imageCell.textContent = record.imageId ? "Loading…" : "—";
+    imageCell.textContent = record.imageId || record.shots?.[0]?.imageId ? "Loading…" : "—";
     row.appendChild(imageCell);
-    if (record.imageId) {
-      getItemImage(record.imageId).then(imageRecord => {
+    if (record.imageId || record.shots?.[0]?.imageId) {
+      getItemImage(record.imageId || record.shots[0].imageId).then(imageRecord => {
         if (!imageRecord?.blob || !imageCell.isConnected) { imageCell.textContent = "Unavailable"; return; }
         const url = URL.createObjectURL(imageRecord.blob);
         const image = document.createElement("img");
@@ -1257,9 +1352,9 @@ function renderHistory() {
     }
     const values = [
       record.barcode,
-      Number(record.horizontalCm).toFixed(2),
-      Number(record.verticalCm).toFixed(2),
-      record.frameType,
+      record.shots ? `L ${record.lengthCm?.toFixed(2)??'—'} / W ${record.widthCm?.toFixed(2)??'—'}` : Number(record.horizontalCm).toFixed(2),
+      record.shots ? `H ${record.heightCm?.toFixed(2)??'—'}` : Number(record.verticalCm).toFixed(2),
+      record.shots ? record.placement : record.frameType,
       formatRecordDate(record.measuredAt)
     ];
     values.forEach(value => {
@@ -1271,7 +1366,7 @@ function renderHistory() {
   });
   emptyHistory.hidden = measurementRecords.length > 0;
   exportHistoryButton.disabled = measurementRecords.length === 0;
-  exportImagesButton.disabled = !measurementRecords.some(record => record.imageId);
+  exportImagesButton.disabled = !measurementRecords.some(record => record.imageId || record.shots?.some(s=>s.imageId));
   clearHistoryButton.disabled = measurementRecords.length === 0;
 }
 
@@ -1293,7 +1388,7 @@ async function clearMeasurementHistory() {
 
 async function exportMeasurementHistory() {
   if (!measurementRecords.length) return;
-  const blob = buildMeasurementWorkbook(measurementRecords);
+  const blob = await buildMeasurementWorkbook(measurementRecords);
   const filename = `object-measurement-history-${new Date().toISOString().slice(0, 10)}.xlsx`;
   await shareGeneratedFile(blob, filename, "Measurement Excel");
 }
@@ -1398,31 +1493,50 @@ async function clearItemImages() {
   });
 }
 
-function buildMeasurementWorkbook(records) {
-  const rows = [
-    ["No.", "Barcode", "Horizontal (cm)", "Vertical (cm)", "Frame Type", "Measured At", "Annotated Image Filename", "Item Image Filename"],
-    ...records.map((record, index) => [
-      index + 1, record.barcode, Number(record.horizontalCm), Number(record.verticalCm),
-      record.frameType, formatRecordDate(record.measuredAt), record.imageFilename || "", record.itemImageFilename || ""
-    ])
-  ];
-  const sheetRows = rows.map((row, rowIndex) => {
-    const cells = row.map((value, columnIndex) => {
-      const ref = `${excelColumnName(columnIndex + 1)}${rowIndex + 1}`;
-      if (typeof value === "number") return `<c r="${ref}"><v>${value}</v></c>`;
-      return `<c r="${ref}" t="inlineStr"><is><t>${xmlEscape(String(value))}</t></is></c>`;
-    }).join("");
-    return `<row r="${rowIndex + 1}">${cells}</row>`;
-  }).join("");
-  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="1" max="1" width="8" customWidth="1"/><col min="2" max="2" width="22" customWidth="1"/><col min="3" max="4" width="18" customWidth="1"/><col min="5" max="5" width="14" customWidth="1"/><col min="6" max="6" width="24" customWidth="1"/><col min="7" max="8" width="48" customWidth="1"/></cols><sheetData>${sheetRows}</sheetData><autoFilter ref="A1:H${rows.length}"/></worksheet>`;
-  const files = {
-    "[Content_Types].xml": `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`,
-    "_rels/.rels": `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
-    "xl/workbook.xml": `<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Measurement History" sheetId="1" r:id="rId1"/></sheets></workbook>`,
-    "xl/_rels/workbook.xml.rels": `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
-    "xl/worksheets/sheet1.xml": sheet
+async function buildMeasurementWorkbook(records) {
+  const details=[['Barcode','Placement','Image No.','View','Horizontal (cm)','Vertical (cm)','Horizontal Axis','Vertical Axis','Frame','Image Filename','Measured At']];
+  const summary=[['Barcode','Placement','Length (cm)','Width (cm)','Height (cm)','Image 1 View','Image 2 View','Measured At','Front Photo']];
+  for(const r of records){
+    if(r.shots){
+      summary.push([r.barcode,r.placement,r.lengthCm,r.widthCm,r.heightCm,r.shots[0]?.view||'',r.shots[1]?.view||'Blank',formatRecordDate(r.measuredAt),'']);
+      r.shots.forEach((sh,i)=>{const axes=viewAxes[r.placement][sh.view];details.push([r.barcode,r.placement,i+1,sh.view,sh.horizontalCm,sh.verticalCm,axes[0],axes[1],sh.frameType,sh.imageFilename,formatRecordDate(r.measuredAt)]);});
+    }else{details.push([r.barcode,'Legacy',1,'Unknown',r.horizontalCm,r.verticalCm,'Unknown','Unknown',r.frameType,r.itemImageFilename,formatRecordDate(r.measuredAt)]);}
+  }
+  function sheetXml(rows, withPhotos=false){
+    const data=rows.map((row,i)=>`<row r="${i+1}">${row.map((v,j)=>{const ref=`${excelColumnName(j+1)}${i+1}`;return typeof v==='number'?`<c r="${ref}"><v>${v}</v></c>`:`<c r="${ref}" t="inlineStr"><is><t>${xmlEscape(String(v??''))}</t></is></c>`;}).join('')}</row>`).join('');
+    const heights=withPhotos?rows.slice(1).map((_,i)=>`<row r="${i+2}" ht="82" customHeight="1"/>`).join(''):'';
+    // Image row heights are applied directly to existing row tags (no duplicate row elements).
+    const adjusted=withPhotos?data.replace(/<row r="(\d+)"/g,(whole,n)=>Number(n)>1?`<row r="${n}" ht="82" customHeight="1"`:whole):data;
+    const cols=withPhotos?'<cols><col min="9" max="9" width="20" customWidth="1"/></cols>':'';
+    const drawing=withPhotos?'<drawing r:id="rId1"/>':'';
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${cols}<sheetData>${adjusted}</sheetData><autoFilter ref="A1:${excelColumnName(rows[0].length)}${rows.length}"/>${drawing}</worksheet>`;
+  }
+  const files={
+    '[Content_Types].xml':'<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>',
+    '_rels/.rels':'<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
+    'xl/workbook.xml':'<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Image Details" sheetId="1" r:id="rId1"/><sheet name="Item Dimensions" sheetId="2" r:id="rId2"/></sheets></workbook>',
+    'xl/_rels/workbook.xml.rels':'<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/></Relationships>',
+    'xl/worksheets/sheet1.xml':sheetXml(details),'xl/worksheets/sheet2.xml':sheetXml(summary,true)
   };
-  return new Blob([createStoredZip(files)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  // Embed the already-cropped first/front view as an actual Excel picture.
+  const pictures=[];
+  for(let i=0;i<records.length;i++){
+    const front=records[i].shots?.find(sh=>sh.view==='front');
+    if(!front?.imageId)continue;
+    const stored=await getItemImage(front.imageId);
+    if(!stored?.blob)continue;
+    let bytes=new Uint8Array(await stored.blob.arrayBuffer());
+    let extension=stored.blob.type==='image/png'?'png':'jpeg';
+    pictures.push({row:i+1,bytes,extension});
+  }
+  if(pictures.length){
+    files['[Content_Types].xml']=files['[Content_Types].xml'].replace('</Types>','<Default Extension="jpeg" ContentType="image/jpeg"/><Default Extension="png" ContentType="image/png"/><Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>');
+    files['xl/worksheets/_rels/sheet2.xml.rels']='<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>';
+    files['xl/drawings/_rels/drawing1.xml.rels']='<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+pictures.map((pic,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/front${i+1}.${pic.extension}"/>`).join('')+'</Relationships>';
+    files['xl/drawings/drawing1.xml']='<?xml version="1.0"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+pictures.map((pic,i)=>`<xdr:oneCellAnchor><xdr:from><xdr:col>8</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${pic.row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="1333500" cy="1000000"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${i+1}" name="Front photo ${i+1}"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rId${i+1}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1333500" cy="1000000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>`).join('')+'</xdr:wsDr>';
+    pictures.forEach((pic,i)=>{files[`xl/media/front${i+1}.${pic.extension}`]=pic.bytes;});
+  }
+  return new Blob([createStoredZip(files)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
 }
 
 function excelColumnName(number) {
