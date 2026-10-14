@@ -236,3 +236,5 @@ button.compact { flex: 0 0 auto; min-height: 38px; padding: 7px 12px; }
 
 .history-controls{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:12px 0}.history-controls select{max-width:190px}.history-thumb{width:64px;height:64px;object-fit:contain}#photoEditControls{margin-top:10px;display:flex;flex-wrap:wrap;gap:8px}#cropPhotoStage{width:100%;flex-basis:100%}#cropPhotoCanvas{width:100%;max-height:350px;object-fit:contain;touch-action:none;border:1px solid #64748b}#productPhotoPreview{max-height:240px;object-fit:contain}
 #photoEditControls[hidden],#cropPhotoStage[hidden],#applyProductCrop[hidden],#cancelProductCrop[hidden]{display:none!important}
+
+.history-choice {padding:24px 4px;text-align:center}.history-choice p{margin:0 0 18px}.history-choice button{margin:6px;min-width:170px;min-height:54px;font-weight:700}.history-choice[hidden],#historyRecords[hidden]{display:none!important}#historyCurrentTitle{margin-right:auto}

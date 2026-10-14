@@ -485,7 +485,7 @@ skipSaveButton.addEventListener("click", () => finishRecordDecision(false));
 cancelNextItemButton.addEventListener("click", () => { pendingRecordAction = null; saveRecordDialog.close(); });
 historyButton.addEventListener("click", () => requestHistory());
 closeHistoryButton.addEventListener("click", () => historyDialog.close());
-document.querySelector('#historyView').addEventListener('change',renderHistory);
+document.querySelector('#historyView').addEventListener('change',e=>showHistoryTable(e.target.value));
 document.querySelector('#selectAllHistory').addEventListener('change',e=>{document.querySelectorAll('.history-select').forEach(c=>c.checked=e.target.checked);updateSelectedHistory();});
 document.querySelector('#deleteSelectedHistory').addEventListener('click',deleteSelectedHistory);
 exportHistoryButton.addEventListener("click", exportMeasurementHistory);
@@ -1408,9 +1408,21 @@ function updateHistoryCount() {
 }
 
 function openHistory() {
-  renderHistory();
+  document.querySelector('#historyChoice').hidden = false;
+  document.querySelector('#historyRecords').hidden = true;
   historyDialog.showModal();
 }
+function showHistoryTable(mode) {
+  document.querySelector('#historyView').value = mode;
+  document.querySelector('#historyChoice').hidden = true;
+  document.querySelector('#historyRecords').hidden = false;
+  document.querySelector('#historyCurrentTitle').textContent = mode === 'details' ? 'Image Details' : 'Item Dimensions';
+  renderHistory();
+}
+document.querySelector('#showImageDetails').addEventListener('click', () => showHistoryTable('details'));
+document.querySelector('#showItemDimensions').addEventListener('click', () => showHistoryTable('dimensions'));
+document.querySelector('#historyBack').addEventListener('click', openHistory);
+
 
 function historyImageCell(row,id,alt){
  const cell=document.createElement('td');row.appendChild(cell);if(!id){cell.textContent='—';return;}
