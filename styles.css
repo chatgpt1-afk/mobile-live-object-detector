@@ -229,3 +229,7 @@ button.compact { flex: 0 0 auto; min-height: 38px; padding: 7px 12px; }
 .dual-config{padding:16px;border:1px solid #bfd1e4;border-radius:14px;margin:14px 0;display:grid;gap:10px}.dual-config label{display:grid;gap:5px;font-weight:600}.dual-config select{width:100%;padding:10px;border-radius:8px}.dual-nav{display:flex;justify-content:space-between;align-items:center;gap:6px}.dual-nav button{padding:9px;font-size:13px}.dual-summary{padding:12px;border-radius:9px;background:#eaf4ff;color:#153958;font-weight:700}.dual-config[hidden]{display:none}
 
 .product-photo-input{display:grid;gap:9px;margin:12px 0;padding:12px;border:1px solid #3a4c56;border-radius:12px}.product-photo-actions{display:flex;gap:8px;flex-wrap:wrap}.product-photo-actions button{flex:1;min-width:125px}.product-photo-input img{max-height:155px;max-width:100%;object-fit:contain;border-radius:8px}.product-photo-input small{color:#aebbc7}
+
+/* Upload sits on its own row below Detect Object. */
+.upload-control-row { flex-basis: 100%; display: flex; }
+.upload-control-row button { width: 100%; }

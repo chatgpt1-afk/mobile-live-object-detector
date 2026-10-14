@@ -9,11 +9,11 @@
   <title>Live Object Frame</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=0.13.3">
+  <link rel="stylesheet" href="styles.css?v=0.13.4">
 </head>
 <body>
   <main id="homePage" class="home-page">
-    <p class="eyebrow">OBJECT MEASUREMENT · VERSION 0.13.3</p>
+    <p class="eyebrow">OBJECT MEASUREMENT · VERSION 0.13.4</p>
     <h1>Measure products with your phone</h1>
     <p>Frame one product with the printed reference marker, confirm the object frame, then save the measurement.</p>
     <button id="startMeasurementButton" class="primary" type="button">Start Measurement</button>
@@ -23,7 +23,7 @@
   <main id="measurementPage" class="app-shell" hidden>
     <header class="topbar">
       <div>
-        <p class="eyebrow">PHASE 2B · VERSION 0.13.3</p>
+        <p class="eyebrow">PHASE 2B · VERSION 0.13.4</p>
         <h1>Live Object Frame</h1>
       </div>
       <div class="header-actions">
@@ -50,10 +50,9 @@
 
     <section class="controls">
       <button id="startButton" class="primary" type="button">Open Camera</button>
-      <button id="uploadImageButton" type="button">Upload Image</button>
-      <input id="uploadImageInput" type="file" accept="image/*" hidden>
       <button id="calibrateButton" type="button" disabled>Set Empty Background</button>
       <button id="detectButton" type="button" disabled>Detect Object</button>
+      <div class="upload-control-row"><button id="uploadImageButton" type="button">Upload Image</button><input id="uploadImageInput" type="file" accept="image/*" hidden></div>
     </section>
 
     <div class="reference-picker"><label for="referenceSize">Reference Paper Size</label><select id="referenceSize"><option value="5">5 × 5 cm</option><option value="10">10 × 10 cm</option><option value="15">15 × 15 cm</option></select><a id="referenceDownload" href="reference/5cm_reference_marker.pdf" target="_blank" rel="noopener">Print selected marker (PDF)</a><small id="placementHint"></small></div>
@@ -209,6 +208,6 @@
   </dialog>
 
   <canvas id="processingCanvas" hidden></canvas>
-  <script src="app.js?v=0.13.3" defer></script>
+  <script src="app.js?v=0.13.4" defer></script>
 </body>
 </html>

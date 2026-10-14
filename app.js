@@ -377,7 +377,7 @@ calibrateButton.addEventListener("click", async () => {
   if (!running || video.readyState < 2) return;
   calibrateButton.disabled = true;
   detectButton.disabled = true;
-  captureButton.disabled = true;
+  captureButton.disabled = false;
   detectionActive = false;
   calibrateButton.textContent = "Saving Background…";
   detectionStatus.textContent = "Capturing empty background";
@@ -422,7 +422,15 @@ function beginDetection() {
   liveMessage.textContent = "Green frame = item; cyan frame = reference marker";
 }
 
-captureButton.addEventListener("click", captureCurrentObject);
+captureButton.addEventListener("click", () => {
+  captureCurrentObject().catch(error => {
+    console.error("Capture failed:", error);
+    captureButton.disabled = !running;
+    captureButton.setAttribute("aria-label", "Capture object");
+    captureButton.title = "Capture object";
+    liveMessage.textContent = `Capture failed: ${error.message || error}. Please retry.`;
+  });
+});
 closeResultButton.addEventListener("click", () => { captureResult.hidden = true; });
 useSystemFrameButton.addEventListener("click", useDetectedFrame);
 manualFrameButton.addEventListener("click", enableManualFrame);
@@ -1345,7 +1353,7 @@ function prepareForNextBarcode() {
   liveMarker = null;
   markerMissingFrames = 0;
   overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
-  captureButton.disabled = true;
+  captureButton.disabled = !running;
   if (running && backgroundFrame) {
     detectionStatus.textContent = "Waiting for next barcode";
     liveMessage.textContent = "Remove the current product, then enter the next barcode";
