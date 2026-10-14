@@ -238,3 +238,12 @@ button.compact { flex: 0 0 auto; min-height: 38px; padding: 7px 12px; }
 #photoEditControls[hidden],#cropPhotoStage[hidden],#applyProductCrop[hidden],#cancelProductCrop[hidden]{display:none!important}
 
 .history-choice {padding:24px 4px;text-align:center}.history-choice p{margin:0 0 18px}.history-choice button{margin:6px;min-width:170px;min-height:54px;font-weight:700}.history-choice[hidden],#historyRecords[hidden]{display:none!important}#historyCurrentTitle{margin-right:auto}
+
+/* v0.13.8: keep touch targets away from Android's edge-back zones. */
+.frame-editor-stage { padding-inline: 38px; box-sizing: border-box; }
+.editor-scroll { width:100%; overflow:auto; overscroll-behavior:contain; border-radius:12px; touch-action:pan-x pan-y; }
+.editor-scroll #frameEditor { width:100%; max-width:none; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+.editor-zoom { display:flex; align-items:center; gap:10px; margin-top:10px; }
+.editor-zoom input { flex:1; min-width:0; }
+.editor-zoom output { min-width:48px; text-align:right; }
+@media(max-width:420px) { .frame-editor-stage {padding-inline:36px;} }

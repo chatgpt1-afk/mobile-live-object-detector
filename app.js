@@ -129,8 +129,8 @@ shotView.addEventListener('change',()=>{if(activeShot===1&&dualShots[1]){dualSho
 document.querySelector('#previousShot').addEventListener('click',()=>showShot(0));
 document.querySelector('#nextShot').addEventListener('click',()=>showShot(1));
 let swipeStart=null;
-document.querySelector('#captureResult').addEventListener('touchstart',e=>{swipeStart={x:e.touches[0].clientX,y:e.touches[0].clientY};},{passive:true});
-document.querySelector('#captureResult').addEventListener('touchend',e=>{if(!swipeStart)return;const dx=e.changedTouches[0].clientX-swipeStart.x,dy=e.changedTouches[0].clientY-swipeStart.y;swipeStart=null;if(Math.abs(dx)>90&&Math.abs(dx)>Math.abs(dy)*1.5)showShot(dx<0?1:0);},{passive:true});
+document.querySelector('#captureResult').addEventListener('touchstart',e=>{if(manualFrameEnabled || markerPicking || e.target.closest('#frameEditorStage')){swipeStart=null;return;}swipeStart={x:e.touches[0].clientX,y:e.touches[0].clientY};},{passive:true});
+document.querySelector('#captureResult').addEventListener('touchend',e=>{if(!swipeStart || manualFrameEnabled || markerPicking)return;const dx=e.changedTouches[0].clientX-swipeStart.x,dy=e.changedTouches[0].clientY-swipeStart.y;swipeStart=null;if(Math.abs(dx)>90&&Math.abs(dx)>Math.abs(dy)*1.5)showShot(dx<0?1:0);},{passive:true});
 async function saveDualRecord(){
   if(dualRecordSaved || dualRecordSaving)return;
   const dims=dualDimensions();
@@ -265,7 +265,7 @@ manualMarkerButton.addEventListener('click', () => {
 function markerHit(point) {
   if (!editableMarker) return null;
   const rect = frameEditor.getBoundingClientRect();
-  const tolerance = 24 * frameEditor.width / Math.max(rect.width, 1);
+  const tolerance = 32 * frameEditor.width / Math.max(rect.width, 1);
   const handle = frameHandles(editableMarker).find(h => Math.hypot(point.x-h.x, point.y-h.y) <= tolerance);
   if (handle) return handle.name;
   return point.x >= editableMarker.x && point.x <= editableMarker.x + editableMarker.width &&
@@ -1133,7 +1133,7 @@ function beginFrameEdit(event) {
   if (!manualFrameEnabled || !editableFrame) return;
   const point = editorPoint(event);
   const rect = frameEditor.getBoundingClientRect();
-  const tolerance = 22 * frameEditor.width / rect.width;
+  const tolerance = 32 * frameEditor.width / rect.width;
   const handle = frameHandles(editableFrame).find(item => Math.hypot(point.x - item.x, point.y - item.y) <= tolerance);
   const inside = point.x >= editableFrame.x && point.x <= editableFrame.x + editableFrame.width &&
     point.y >= editableFrame.y && point.y <= editableFrame.y + editableFrame.height;
@@ -1966,3 +1966,18 @@ uploadImageInput.addEventListener('change', async () => {
     uploadImageButton.disabled = false;
   }
 });
+
+// Safe mobile editing: zoom affects display only; editor coordinates remain image pixels.
+const editorZoom = document.querySelector('#editorZoom');
+const editorZoomLabel = document.querySelector('#editorZoomLabel');
+const editorScroll = document.querySelector('#editorScroll');
+function updateEditorZoom(){
+  const scale=Number(editorZoom.value)/100;
+  frameEditor.style.width=`${scale*100}%`;
+  frameEditor.style.maxWidth='none';
+  editorZoomLabel.textContent=`${Math.round(scale*100)}%`;
+}
+editorZoom.addEventListener('input',updateEditorZoom);
+updateEditorZoom();
+// Prevent page scroll during a frame drag; system-level back gesture cannot be intercepted reliably.
+frameEditor.addEventListener('pointerdown', e=>{ if(manualFrameEnabled || markerPicking) e.preventDefault(); }, {passive:false});
