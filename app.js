@@ -513,7 +513,16 @@ cancelDuplicateButton.addEventListener("click", () => resolveDuplicateBarcode("c
 
 updateHistoryCount();
 
-barcodeDialog.addEventListener("cancel", event => event.preventDefault());
+barcodeDialog.addEventListener("cancel", event => { event.preventDefault(); closeIdentification(); });
+document.querySelector("#closeBarcodeDialog").addEventListener("click", closeIdentification);
+function closeIdentification() {
+  stopBarcodeScan();
+  if (barcodeDialog.open) barcodeDialog.close();
+  productPhotoBlob = null;
+  productPhotoPreview.hidden = true;
+  productPhotoPreview.removeAttribute("src");
+  showHome();
+}
 
 function openBarcodeDialog() {
   stopBarcodeScan();
@@ -1001,15 +1010,15 @@ async function captureCurrentObject(sourceCanvas = null) {
   updateFrameHistoryButtons();
   renderFrameEditor();
 
-  if (editableMarker && markerPicking) {
-    const m=editableMarker;
+  if (capturedMarker || (editableMarker && markerPicking)) {
+    const m=markerPicking && editableMarker ? editableMarker : capturedMarker;
     frameEditorCtx.strokeStyle='#00baff';
     frameEditorCtx.lineWidth=Math.max(4,frameEditor.width/260);
     frameEditorCtx.strokeRect(m.x,m.y,m.width,m.height);
     const size=Math.max(18,frameEditor.width/42);
     frameEditorCtx.fillStyle='#ffffff';
     frameEditorCtx.strokeStyle='#0087d9';
-    for(const h of frameHandles(m)){
+    for(const h of (markerPicking ? frameHandles(m) : [])){
       frameEditorCtx.fillRect(h.x-size/2,h.y-size/2,size,size);
       frameEditorCtx.strokeRect(h.x-size/2,h.y-size/2,size,size);
     }
@@ -1053,6 +1062,7 @@ function normaliseFrame(frame, width, height) {
 }
 
 function useDetectedFrame() {
+  if (markerPicking && !commitEditableMarker()) return;
   if (!systemFrame) return;
   editableFrame = { ...systemFrame };
   manualFrameEnabled = false;
@@ -1064,6 +1074,7 @@ function useDetectedFrame() {
 }
 
 function enableManualFrame() {
+  if (markerPicking && !commitEditableMarker()) return;
   if (!editableFrame) return;
   markerPicking=false; markerGesture=null;
   manualFrameEnabled = true;
@@ -1074,6 +1085,7 @@ function enableManualFrame() {
 }
 
 function resetFrameEdit() {
+  if (markerPicking && !commitEditableMarker()) return;
   if (!systemFrame) return;
   editableFrame = { ...systemFrame };
   markerPicking=false; markerGesture=null;
@@ -1201,15 +1213,15 @@ function renderFrameEditor() {
       frameEditorCtx.strokeRect(handle.x - size / 2, handle.y - size / 2, size, size);
     }
   }
-  if (editableMarker && markerPicking) {
-    const m=editableMarker;
+  if (capturedMarker || (editableMarker && markerPicking)) {
+    const m=markerPicking && editableMarker ? editableMarker : capturedMarker;
     frameEditorCtx.strokeStyle='#00baff';
     frameEditorCtx.lineWidth=Math.max(4,frameEditor.width/260);
     frameEditorCtx.strokeRect(m.x,m.y,m.width,m.height);
     const size=Math.max(18,frameEditor.width/42);
     frameEditorCtx.fillStyle='#ffffff';
     frameEditorCtx.strokeStyle='#0087d9';
-    for(const h of frameHandles(m)){
+    for(const h of (markerPicking ? frameHandles(m) : [])){
       frameEditorCtx.fillRect(h.x-size/2,h.y-size/2,size,size);
       frameEditorCtx.strokeRect(h.x-size/2,h.y-size/2,size,size);
     }
@@ -1259,6 +1271,10 @@ async function confirmFrameAndMeasure() {
   ctx.strokeStyle = "#36e37e";
   ctx.lineWidth = lineWidth;
   ctx.strokeRect(editableFrame.x, editableFrame.y, editableFrame.width, editableFrame.height);
+  // Show the exact reference frame used for this measurement, not a fresh detection.
+  ctx.strokeStyle = "#00baff";
+  ctx.lineWidth = lineWidth;
+  ctx.strokeRect(capturedMarker.x, capturedMarker.y, capturedMarker.width, capturedMarker.height);
   const fontSize = Math.max(30, output.width / 32);
   ctx.font = `700 ${fontSize}px system-ui, sans-serif`;
   const lines = [
