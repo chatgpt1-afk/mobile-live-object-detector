@@ -99,3 +99,11 @@ For every test, record:
 - Normal small hand movements are compensated. Moving much closer, zooming or changing the camera angle still changes the scene geometry and requires reopening Camera with an empty scene.
 - Transparent, reflective and very low-contrast items remain difficult.
 - The system measures only the current 2D Horizontal × Vertical view; it does not infer a third dimension.
+
+Version 0.13.3: Upload Image imports a saved photo directly into marker detection and adjustable manual frame review without requiring camera/background calibration. Marker pattern matching tests four right-angle orientations.
+
+## v0.13.3 checks
+1. Open camera without background or detected marker/item: Capture button should work.
+2. Capture then Manual Marker -> Manual Frame: green frame should drag and resize. Reverse the order too.
+3. Enter barcode without Item Photo: Continue must not proceed. Capture or upload Item Photo, then continue.
+4. Save a two-shot item and export Excel: Item Dimensions should embed the separately supplied Item Photo.

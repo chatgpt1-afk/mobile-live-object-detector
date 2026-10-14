@@ -1,6 +1,29 @@
 "use strict";
 
 const video = document.querySelector("#camera");
+let productPhotoBlob = null;
+let currentProductPhotoBlob = null;
+const productPhotoInput = document.querySelector('#productPhotoInput');
+const productPhotoCamera = document.querySelector('#productPhotoCamera');
+const productPhotoPreview = document.querySelector('#productPhotoPreview');
+document.querySelector('#takeProductPhoto').addEventListener('click',()=>productPhotoCamera.click());
+document.querySelector('#uploadProductPhoto').addEventListener('click',()=>productPhotoInput.click());
+async function setProductPhoto(event){
+  const file=event.target.files?.[0];if(!file)return;
+  if(!file.type.startsWith('image/')){barcodeMessage.textContent='Please choose an image.';return;}
+  try {
+    const bitmap=await createImageBitmap(file);
+    const canvas=document.createElement('canvas');const scale=Math.min(1,1200/Math.max(bitmap.width,bitmap.height));
+    canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);
+    canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close?.();
+    productPhotoBlob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.85));
+    productPhotoPreview.src=URL.createObjectURL(productPhotoBlob);productPhotoPreview.hidden=false;
+    barcodeMessage.textContent='Item photo ready. Enter barcode and Continue.';
+  }catch(error){barcodeMessage.textContent='Cannot read item photo: '+error.message;}
+  event.target.value='';
+}
+productPhotoInput.addEventListener('change',setProductPhoto);
+productPhotoCamera.addEventListener('change',setProductPhoto);
 const itemPlacement = document.querySelector('#itemPlacement');
 const shotView = document.querySelector('#shotView');
 const shotIndicator = document.querySelector('#shotIndicator');
@@ -77,7 +100,10 @@ async function saveDualRecord(){
   const dims=dualDimensions();
   if(!dualShots[0])return;
   if(!dualShots[1]&&shotView.value!=='blank')return;
-  const record={barcode:currentBarcode,placement:dualPlacement,lengthCm:dims.length,widthCm:dims.width,heightCm:dims.height,status:Object.values(dims).some(v=>v===null)?'Review Required':'Complete',measuredAt:new Date().toISOString(),shots:[]};
+  if(!currentProductPhotoBlob){dualStatus.textContent='Item photo required. Return to barcode step.';return;}
+  const productPhotoId=crypto.randomUUID?crypto.randomUUID():`photo-${Date.now()}`;
+  await saveItemImage(productPhotoId,`${currentBarcode}_product.jpg`,currentProductPhotoBlob);
+  const record={productPhotoId,barcode:currentBarcode,placement:dualPlacement,lengthCm:dims.length,widthCm:dims.width,heightCm:dims.height,status:Object.values(dims).some(v=>v===null)?'Review Required':'Complete',measuredAt:new Date().toISOString(),shots:[]};
   for(let i=0;i<2;i++){
     const shot=dualShots[i];if(!shot)continue;
     const id=crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${i}`;
@@ -186,6 +212,7 @@ manualMarkerButton.textContent = 'Manual Marker (Adjust Blue Frame)';
 manualMarkerButton.addEventListener('click', () => {
   if (!capturedFullCanvas) return;
   markerPicking = true;
+  frameGesture=null;
   manualFrameEnabled = false;
   markerPoints = [];
   const w = frameEditor.width, h = frameEditor.height;
@@ -434,6 +461,9 @@ barcodeDialog.addEventListener("cancel", event => event.preventDefault());
 function openBarcodeDialog() {
   stopBarcodeScan();
   barcodeInput.value = "";
+  productPhotoBlob=null;
+  productPhotoPreview.hidden=true;
+  productPhotoPreview.removeAttribute('src');
   barcodeMessage.textContent = "Key in the barcode or scan it using the phone camera.";
   if (!barcodeDialog.open) barcodeDialog.showModal();
   setTimeout(() => barcodeInput.focus(), 80);
@@ -446,6 +476,7 @@ function acceptBarcode(event) {
     barcodeMessage.textContent = "Barcode is required before measuring the product.";
     return;
   }
+  if(!productPhotoBlob){barcodeMessage.textContent='Capture or upload an Item Photo before continuing.';return;}
   const duplicateCount = measurementRecords.filter(record => record.barcode === value).length;
   if (duplicateCount) {
     pendingBarcode = value;
@@ -460,6 +491,7 @@ function acceptBarcode(event) {
 function useBarcode(value) {
   resetDual();
   currentBarcode = value;
+  currentProductPhotoBlob=productPhotoBlob;
   currentMeasurement = null;
   currentItemImageBlob = null;
   stopBarcodeScan();
@@ -587,7 +619,7 @@ async function startCamera() {
     startButton.textContent = "Close Camera";
     calibrateButton.disabled = false;
     detectButton.disabled = true;
-    captureButton.disabled = true;
+    captureButton.disabled = false;
     resizeCanvases();
     detectionActive = false;
     detectionStatus.textContent = "Empty background required";
@@ -684,14 +716,14 @@ function processFrame() {
     detectionStatus.textContent = "Calibration required";
     confidenceText.textContent = "—";
     markerStatus.textContent = "Waiting for background";
-    captureButton.disabled = true;
+    captureButton.disabled = false;
     return;
   }
 
   if (!detectionActive) {
     drawOverlay(null, null);
     markerStatus.textContent = "Waiting for Detect Object";
-    captureButton.disabled = true;
+    captureButton.disabled = false;
     return;
   }
 
@@ -803,13 +835,19 @@ function markerPatternScore(data,width,height,box) {
     return .299*data[i]+.587*data[i+1]+.114*data[i+2];
   };
   const dark=[[.5,.04],[.5,.96],[.04,.5],[.96,.5],[.30,.30],[.70,.30],[.30,.70],[.50,.50]];
-  const values=dark.map(([x,y])=>gray(x,y));
-  const light=gray(.70,.70);
-  const darkMedian=[...values].sort((a,b)=>a-b)[3];
-  const limit=(light+darkMedian)/2;
-  if(light-darkMedian<35) return 0;
-  const good=values.filter(v=>v<limit).length;
-  return (good+(light>limit?1:0))/9;
+  let best = 0;
+  for (let turn=0;turn<4;turn++) {
+    const rotate=([x,y])=>turn===0?[x,y]:turn===1?[1-y,x]:turn===2?[1-x,1-y]:[y,1-x];
+    const values=dark.map(pt=>{const [x,y]=rotate(pt);return gray(x,y);});
+    const [lx,ly]=rotate([.70,.70]);
+    const light=gray(lx,ly);
+    const darkMedian=[...values].sort((a,b)=>a-b)[3];
+    const limit=(light+darkMedian)/2;
+    if(light-darkMedian<35) continue;
+    const good=values.filter(v=>v<limit).length;
+    best=Math.max(best,(good+(light>limit?1:0))/9);
+  }
+  return best;
 }
 
 function clearMaskRegion(mask, width, height, box, margin) {
@@ -818,8 +856,8 @@ function clearMaskRegion(mask, width, height, box, margin) {
   for (let y = top; y < bottom; y++) mask.fill(0, y * width + left, y * width + right);
 }
 
-async function captureCurrentObject() {
-  if (!running || !detectionActive || video.readyState < 2) return;
+async function captureCurrentObject(sourceCanvas = null) {
+  if (!sourceCanvas && (!running || video.readyState < 2)) return;
   captureButton.disabled = true;
   currentMeasurement = null;
   currentItemImageBlob = null;
@@ -828,15 +866,15 @@ async function captureCurrentObject() {
   captureButton.setAttribute("aria-label", "Capturing");
   captureButton.title = "Capturing";
   const full = document.createElement("canvas");
-  full.width = video.videoWidth;
-  full.height = video.videoHeight;
+  full.width = sourceCanvas ? sourceCanvas.width : video.videoWidth;
+  full.height = sourceCanvas ? sourceCanvas.height : video.videoHeight;
   const fullCtx = full.getContext("2d", { willReadFrequently: true });
-  fullCtx.drawImage(video, 0, 0, full.width, full.height);
+  fullCtx.drawImage(sourceCanvas || video, 0, 0, full.width, full.height);
 
   const fullFrame = fullCtx.getImageData(0, 0, full.width, full.height);
   markerPicking=false; markerPoints=[]; editableMarker=null; markerGesture=null;
   capturedMarker = detectReferenceMarker(fullFrame.data, full.width, full.height);
-  if (!capturedMarker && liveMarker) {
+  if (!sourceCanvas && !capturedMarker && liveMarker) {
     const liveScaleX = full.width / workCanvas.width;
     const liveScaleY = full.height / workCanvas.height;
     capturedMarker = {
@@ -852,14 +890,17 @@ async function captureCurrentObject() {
   const analysisCtx = analysisCanvas.getContext("2d", { willReadFrequently: true });
   analysisCtx.drawImage(full, 0, 0, analysisCanvas.width, analysisCanvas.height);
   const smallFrame = analysisCtx.getImageData(0, 0, analysisCanvas.width, analysisCanvas.height);
-  const alignment = estimateBackgroundOffset(
-    smallFrame.data, backgroundFrame, analysisCanvas.width, analysisCanvas.height, 6
-  );
-  const capturedMask = maskFromSavedBackground(
-    smallFrame.data, backgroundFrame, analysisCanvas.width, analysisCanvas.height,
-    Number(thresholdInput.value), alignment.dx, alignment.dy
-  );
-  if (capturedMarker && !MARKER_ON_ITEM) {
+  let capturedMask = null;
+  if (backgroundFrame && !sourceCanvas) {
+    const alignment = estimateBackgroundOffset(
+      smallFrame.data, backgroundFrame, analysisCanvas.width, analysisCanvas.height, 6
+    );
+    capturedMask = maskFromSavedBackground(
+      smallFrame.data, backgroundFrame, analysisCanvas.width, analysisCanvas.height,
+      Number(thresholdInput.value), alignment.dx, alignment.dy
+    );
+  }
+  if (capturedMask && capturedMarker && !MARKER_ON_ITEM) {
     const markerOnAnalysis = {
       x: capturedMarker.x * analysisCanvas.width / full.width,
       y: capturedMarker.y * analysisCanvas.height / full.height,
@@ -871,18 +912,20 @@ async function captureCurrentObject() {
       capturedMask, analysisCanvas.width, analysisCanvas.height, markerOnAnalysis, markerPaperMargin
     );
   }
-  closeSmallGaps(capturedMask, analysisCanvas.width, analysisCanvas.height, 1);
-  majorityFilter(capturedMask, analysisCanvas.width, analysisCanvas.height, 1);
+  if (capturedMask) {
+    closeSmallGaps(capturedMask, analysisCanvas.width, analysisCanvas.height, 1);
+    majorityFilter(capturedMask, analysisCanvas.width, analysisCanvas.height, 1);
+  }
   const minimumPixels = analysisCanvas.width * analysisCanvas.height * Number(minAreaInput.value) / 1000;
-  const capturedItem = largestCentralComponent(
+  const capturedItem = capturedMask ? largestCentralComponent(
     capturedMask, analysisCanvas.width, analysisCanvas.height, minimumPixels
-  );
+  ) : null;
 
   const sx = full.width / analysisCanvas.width;
   const sy = full.height / analysisCanvas.height;
   const detectedFrame = capturedItem
     ? expandBox(capturedItem, analysisCanvas.width, analysisCanvas.height, 0.02)
-    : lastValidBox || {
+    : (!sourceCanvas && lastValidBox) || {
       x: analysisCanvas.width * 0.2, y: analysisCanvas.height * 0.2,
       width: analysisCanvas.width * 0.6, height: analysisCanvas.height * 0.6
     };
@@ -930,7 +973,7 @@ async function captureCurrentObject() {
   frameCoverage.textContent = `${((editableFrame.width * editableFrame.height) / (full.width * full.height) * 100).toFixed(1)}%`;
   markerStatus.textContent = capturedMarker ? "Detected" : "Not detected";
   analysisStatus.textContent = "FRAME REVIEW";
-  analysisReason.textContent = capturedItem ? "Review the suggested frame" : "System frame unavailable — adjust the manual frame";
+  analysisReason.textContent = sourceCanvas ? "Uploaded photo — adjust the item frame and marker as needed" : (capturedItem ? "Review the suggested frame" : "System frame unavailable — adjust the manual frame");
   horizontalSize.textContent = "Pending frame confirmation";
   verticalSize.textContent = "Pending frame confirmation";
   referenceScale.textContent = capturedMarker
@@ -968,6 +1011,7 @@ function useDetectedFrame() {
 
 function enableManualFrame() {
   if (!editableFrame) return;
+  markerPicking=false; markerGesture=null;
   manualFrameEnabled = true;
   manualFrameButton.classList.add("active");
   useSystemFrameButton.classList.remove("active");
@@ -978,6 +1022,7 @@ function enableManualFrame() {
 function resetFrameEdit() {
   if (!systemFrame) return;
   editableFrame = { ...systemFrame };
+  markerPicking=false; markerGesture=null;
   manualFrameEnabled = true;
   manualFrameButton.classList.add("active");
   useSystemFrameButton.classList.remove("active");
@@ -1495,7 +1540,7 @@ async function clearItemImages() {
 
 async function buildMeasurementWorkbook(records) {
   const details=[['Barcode','Placement','Image No.','View','Horizontal (cm)','Vertical (cm)','Horizontal Axis','Vertical Axis','Frame','Image Filename','Measured At']];
-  const summary=[['Barcode','Placement','Length (cm)','Width (cm)','Height (cm)','Image 1 View','Image 2 View','Measured At','Front Photo']];
+  const summary=[['Barcode','Placement','Length (cm)','Width (cm)','Height (cm)','Image 1 View','Image 2 View','Measured At','Item Photo']];
   for(const r of records){
     if(r.shots){
       summary.push([r.barcode,r.placement,r.lengthCm,r.widthCm,r.heightCm,r.shots[0]?.view||'',r.shots[1]?.view||'Blank',formatRecordDate(r.measuredAt),'']);
@@ -1518,12 +1563,12 @@ async function buildMeasurementWorkbook(records) {
     'xl/_rels/workbook.xml.rels':'<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/></Relationships>',
     'xl/worksheets/sheet1.xml':sheetXml(details),'xl/worksheets/sheet2.xml':sheetXml(summary,true)
   };
-  // Embed the already-cropped first/front view as an actual Excel picture.
+  // Embed the separately captured or uploaded item photo as an Excel picture.
   const pictures=[];
   for(let i=0;i<records.length;i++){
-    const front=records[i].shots?.find(sh=>sh.view==='front');
-    if(!front?.imageId)continue;
-    const stored=await getItemImage(front.imageId);
+    const productPhotoId=records[i].productPhotoId;
+    if(!productPhotoId)continue;
+    const stored=await getItemImage(productPhotoId);
     if(!stored?.blob)continue;
     let bytes=new Uint8Array(await stored.blob.arrayBuffer());
     let extension=stored.blob.type==='image/png'?'png':'jpeg';
@@ -1533,7 +1578,7 @@ async function buildMeasurementWorkbook(records) {
     files['[Content_Types].xml']=files['[Content_Types].xml'].replace('</Types>','<Default Extension="jpeg" ContentType="image/jpeg"/><Default Extension="png" ContentType="image/png"/><Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>');
     files['xl/worksheets/_rels/sheet2.xml.rels']='<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>';
     files['xl/drawings/_rels/drawing1.xml.rels']='<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+pictures.map((pic,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/front${i+1}.${pic.extension}"/>`).join('')+'</Relationships>';
-    files['xl/drawings/drawing1.xml']='<?xml version="1.0"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+pictures.map((pic,i)=>`<xdr:oneCellAnchor><xdr:from><xdr:col>8</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${pic.row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="1333500" cy="1000000"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${i+1}" name="Front photo ${i+1}"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rId${i+1}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1333500" cy="1000000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>`).join('')+'</xdr:wsDr>';
+    files['xl/drawings/drawing1.xml']='<?xml version="1.0"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+pictures.map((pic,i)=>`<xdr:oneCellAnchor><xdr:from><xdr:col>8</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${pic.row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="1333500" cy="1000000"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${i+1}" name="Item photo ${i+1}"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rId${i+1}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1333500" cy="1000000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>`).join('')+'</xdr:wsDr>';
     pictures.forEach((pic,i)=>{files[`xl/media/front${i+1}.${pic.extension}`]=pic.bytes;});
   }
   return new Blob([createStoredZip(files)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
@@ -1877,3 +1922,28 @@ if ("serviceWorker" in navigator) {
     });
   });
 }
+
+// Import a stored photo into the same review and measurement workflow as live capture.
+const uploadImageButton = document.querySelector('#uploadImageButton');
+const uploadImageInput = document.querySelector('#uploadImageInput');
+uploadImageButton.addEventListener('click', () => uploadImageInput.click());
+uploadImageInput.addEventListener('change', async () => {
+  const file = uploadImageInput.files?.[0];
+  if (!file) return;
+  uploadImageButton.disabled = true;
+  try {
+    if (!file.type.startsWith('image/')) throw new Error('Please select an image file.');
+    const bitmap = await createImageBitmap(file, {imageOrientation:'from-image'});
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width; canvas.height = bitmap.height;
+    if (!canvas.width || !canvas.height) throw new Error('Image has no pixels.');
+    canvas.getContext('2d').drawImage(bitmap,0,0);
+    bitmap.close?.();
+    await captureCurrentObject(canvas);
+  } catch(error) {
+    alert('Image upload failed: ' + error.message);
+  } finally {
+    uploadImageInput.value = '';
+    uploadImageButton.disabled = false;
+  }
+});
