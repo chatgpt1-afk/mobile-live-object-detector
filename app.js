@@ -17,11 +17,40 @@ async function setProductPhoto(event){
     canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);
     canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close?.();
     productPhotoBlob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.85));
-    productPhotoPreview.src=URL.createObjectURL(productPhotoBlob);productPhotoPreview.hidden=false;
+    productPhotoPreview.src=URL.createObjectURL(productPhotoBlob);productPhotoPreview.hidden=false;document.querySelector('#photoEditControls').hidden=false;closeCrop();
     barcodeMessage.textContent='Item photo ready. Enter barcode and Continue.';
   }catch(error){barcodeMessage.textContent='Cannot read item photo: '+error.message;}
   event.target.value='';
 }
+let productPhotoCanvas=null, cropRect=null, cropStart=null;
+const cropStage=document.querySelector('#cropPhotoStage'),cropCanvas=document.querySelector('#cropPhotoCanvas');
+const cropCtx=cropCanvas.getContext('2d');
+async function updateProductPhotoFromCanvas(canvas){
+ productPhotoBlob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.9));
+ productPhotoPreview.src=URL.createObjectURL(productPhotoBlob);productPhotoPreview.hidden=false;
+ document.querySelector('#photoEditControls').hidden=false;
+}
+async function rotateProductPhoto(clockwise){
+ if(!productPhotoBlob)return;
+ const bmp=await createImageBitmap(productPhotoBlob),c=document.createElement('canvas');
+ c.width=bmp.height;c.height=bmp.width;
+ const ctx=c.getContext('2d');ctx.translate(c.width/2,c.height/2);ctx.rotate(clockwise?Math.PI/2:-Math.PI/2);ctx.drawImage(bmp,-bmp.width/2,-bmp.height/2);bmp.close?.();
+ await updateProductPhotoFromCanvas(c);
+}
+document.querySelector('#rotatePhotoLeft').addEventListener('click',()=>rotateProductPhoto(false));
+document.querySelector('#rotatePhotoRight').addEventListener('click',()=>rotateProductPhoto(true));
+function drawCrop(){if(!productPhotoCanvas)return;cropCtx.clearRect(0,0,cropCanvas.width,cropCanvas.height);cropCtx.drawImage(productPhotoCanvas,0,0);if(cropRect){cropCtx.strokeStyle='#3b82f6';cropCtx.lineWidth=Math.max(2,cropCanvas.width/400);cropCtx.strokeRect(cropRect.x,cropRect.y,cropRect.w,cropRect.h);}}
+document.querySelector('#cropProductPhoto').addEventListener('click',async()=>{
+ if(!productPhotoBlob)return;const bmp=await createImageBitmap(productPhotoBlob);productPhotoCanvas=document.createElement('canvas');productPhotoCanvas.width=bmp.width;productPhotoCanvas.height=bmp.height;productPhotoCanvas.getContext('2d').drawImage(bmp,0,0);bmp.close?.();
+ cropCanvas.width=productPhotoCanvas.width;cropCanvas.height=productPhotoCanvas.height;cropRect=null;cropStage.hidden=false;document.querySelector('#applyProductCrop').hidden=false;document.querySelector('#cancelProductCrop').hidden=false;drawCrop();
+});
+function cropPoint(e){const r=cropCanvas.getBoundingClientRect();return{x:(e.clientX-r.left)*cropCanvas.width/r.width,y:(e.clientY-r.top)*cropCanvas.height/r.height};}
+cropCanvas.addEventListener('pointerdown',e=>{cropStart=cropPoint(e);cropCanvas.setPointerCapture(e.pointerId);});
+cropCanvas.addEventListener('pointermove',e=>{if(!cropStart)return;const q=cropPoint(e);cropRect={x:Math.max(0,Math.min(q.x,cropStart.x)),y:Math.max(0,Math.min(q.y,cropStart.y)),w:Math.abs(q.x-cropStart.x),h:Math.abs(q.y-cropStart.y)};drawCrop();});
+cropCanvas.addEventListener('pointerup',()=>{cropStart=null;});
+function closeCrop(){cropStage.hidden=true;document.querySelector('#applyProductCrop').hidden=true;document.querySelector('#cancelProductCrop').hidden=true;}
+document.querySelector('#cancelProductCrop').addEventListener('click',closeCrop);
+document.querySelector('#applyProductCrop').addEventListener('click',async()=>{if(!cropRect||cropRect.w<5||cropRect.h<5)return;const c=document.createElement('canvas');c.width=Math.round(cropRect.w);c.height=Math.round(cropRect.h);c.getContext('2d').drawImage(productPhotoCanvas,cropRect.x,cropRect.y,cropRect.w,cropRect.h,0,0,c.width,c.height);await updateProductPhotoFromCanvas(c);closeCrop();});
 productPhotoInput.addEventListener('change',setProductPhoto);
 productPhotoCamera.addEventListener('change',setProductPhoto);
 const itemPlacement = document.querySelector('#itemPlacement');
@@ -107,8 +136,9 @@ async function saveDualRecord(){
   for(let i=0;i<2;i++){
     const shot=dualShots[i];if(!shot)continue;
     const id=crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${i}`;
-    await saveItemImage(id,shot.itemImageFilename,shot.blob);
-    record.shots.push({view:shot.view,placement:dualPlacement,horizontalCm:shot.horizontalCm,verticalCm:shot.verticalCm,imageId:id,imageFilename:shot.itemImageFilename,frameType:shot.frameType});
+    const shotFilename=`${currentBarcode}_${dualPlacement}_${shot.view}_image${i+1}.jpg`;
+    await saveItemImage(id,shotFilename,shot.blob);
+    record.shots.push({view:shot.view,placement:dualPlacement,horizontalCm:shot.horizontalCm,verticalCm:shot.verticalCm,imageId:id,imageFilename:shotFilename,frameType:shot.frameType});
   }
   measurementRecords.push(record);
   localStorage.setItem('object-measurement-records-v1',JSON.stringify(measurementRecords));
@@ -455,7 +485,9 @@ skipSaveButton.addEventListener("click", () => finishRecordDecision(false));
 cancelNextItemButton.addEventListener("click", () => { pendingRecordAction = null; saveRecordDialog.close(); });
 historyButton.addEventListener("click", () => requestHistory());
 closeHistoryButton.addEventListener("click", () => historyDialog.close());
-clearHistoryButton.addEventListener("click", clearMeasurementHistory);
+document.querySelector('#historyView').addEventListener('change',renderHistory);
+document.querySelector('#selectAllHistory').addEventListener('change',e=>{document.querySelectorAll('.history-select').forEach(c=>c.checked=e.target.checked);updateSelectedHistory();});
+document.querySelector('#deleteSelectedHistory').addEventListener('click',deleteSelectedHistory);
 exportHistoryButton.addEventListener("click", exportMeasurementHistory);
 exportImagesButton.addEventListener("click", exportItemImages);
 replaceDuplicateButton.addEventListener("click", () => resolveDuplicateBarcode("replace"));
@@ -1380,63 +1412,39 @@ function openHistory() {
   historyDialog.showModal();
 }
 
-function renderHistory() {
-  historyTableBody.replaceChildren();
-  measurementRecords.forEach((record, index) => {
-    const row = document.createElement("tr");
-    const numberCell = document.createElement("td");
-    numberCell.textContent = index + 1;
-    row.appendChild(numberCell);
-    const imageCell = document.createElement("td");
-    imageCell.textContent = record.imageId || record.shots?.[0]?.imageId ? "Loading…" : "—";
-    row.appendChild(imageCell);
-    if (record.imageId || record.shots?.[0]?.imageId) {
-      getItemImage(record.imageId || record.shots[0].imageId).then(imageRecord => {
-        if (!imageRecord?.blob || !imageCell.isConnected) { imageCell.textContent = "Unavailable"; return; }
-        const url = URL.createObjectURL(imageRecord.blob);
-        const image = document.createElement("img");
-        image.className = "history-thumb";
-        image.alt = `${record.barcode} item`;
-        image.src = url;
-        image.title = "Tap to open item image";
-        image.addEventListener("click", () => window.open(url, "_blank"));
-        imageCell.replaceChildren(image);
-      });
-    }
-    const values = [
-      record.barcode,
-      record.shots ? `L ${record.lengthCm?.toFixed(2)??'—'} / W ${record.widthCm?.toFixed(2)??'—'}` : Number(record.horizontalCm).toFixed(2),
-      record.shots ? `H ${record.heightCm?.toFixed(2)??'—'}` : Number(record.verticalCm).toFixed(2),
-      record.shots ? record.placement : record.frameType,
-      formatRecordDate(record.measuredAt)
-    ];
-    values.forEach(value => {
-      const cell = document.createElement("td");
-      cell.textContent = value;
-      row.appendChild(cell);
-    });
-    historyTableBody.appendChild(row);
+function historyImageCell(row,id,alt){
+ const cell=document.createElement('td');row.appendChild(cell);if(!id){cell.textContent='—';return;}
+ cell.textContent='Loading…';getItemImage(id).then(stored=>{if(!cell.isConnected)return;if(!stored?.blob){cell.textContent='Unavailable';return;}const url=URL.createObjectURL(stored.blob),img=document.createElement('img');img.className='history-thumb';img.src=url;img.alt=alt;img.onclick=()=>window.open(url,'_blank');cell.replaceChildren(img);});
+}
+function historyCell(row,value){const c=document.createElement('td');c.textContent=value??'—';row.appendChild(c);}
+function renderHistory(){
+ const mode=document.querySelector('#historyView').value,head=document.querySelector('#historyTableHead');historyTableBody.replaceChildren();head.replaceChildren();
+ const headings=mode==='details'?['✓','No.','Image','Barcode','Placement','View','Horizontal (cm)','Vertical (cm)','Frame','Measured At']:['✓','No.','Item','Barcode','Placement','Length (cm)','Width (cm)','Height (cm)','Measured At'];
+ const tr=document.createElement('tr');head.appendChild(tr);headings.forEach(v=>{const th=document.createElement('th');th.textContent=v;tr.appendChild(th);});
+ let n=0;
+ measurementRecords.forEach((record,index)=>{
+  const entries=mode==='details'?(record.shots?.length?record.shots:[{imageId:record.imageId,view:'Unknown',horizontalCm:record.horizontalCm,verticalCm:record.verticalCm,frameType:record.frameType}]):[null];
+  entries.forEach(shot=>{
+   const row=document.createElement('tr'),select=document.createElement('input');select.type='checkbox';select.className='history-select';select.dataset.index=index;select.addEventListener('change',updateSelectedHistory);const selectTd=document.createElement('td');selectTd.appendChild(select);row.appendChild(selectTd);historyCell(row,++n);
+   historyImageCell(row,mode==='details'?shot.imageId:(record.productPhotoId||record.imageId),record.barcode);
+   if(mode==='details') [record.barcode,record.placement||'Legacy',shot.view,shot.horizontalCm?.toFixed?.(2),shot.verticalCm?.toFixed?.(2),shot.frameType,formatRecordDate(record.measuredAt)].forEach(v=>historyCell(row,v));
+   else [record.barcode,record.placement||'Legacy',record.lengthCm?.toFixed?.(2),record.widthCm?.toFixed?.(2),record.heightCm?.toFixed?.(2),formatRecordDate(record.measuredAt)].forEach(v=>historyCell(row,v));
+   historyTableBody.appendChild(row);
   });
-  emptyHistory.hidden = measurementRecords.length > 0;
-  exportHistoryButton.disabled = measurementRecords.length === 0;
-  exportImagesButton.disabled = !measurementRecords.some(record => record.imageId || record.shots?.some(s=>s.imageId));
-  clearHistoryButton.disabled = measurementRecords.length === 0;
+ });
+ emptyHistory.hidden=measurementRecords.length>0;exportHistoryButton.disabled=!measurementRecords.length;exportImagesButton.disabled=!measurementRecords.length;document.querySelector('#selectAllHistory').checked=false;updateSelectedHistory();
 }
-
-function formatRecordDate(value) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? String(value || "") : date.toLocaleString();
-}
-
-async function clearMeasurementHistory() {
-  if (!measurementRecords.length) return;
-  if (!window.confirm("Clear all measurement history? This cannot be undone.")) return;
-  measurementRecords = [];
-  localStorage.removeItem("object-measurement-records-v1");
-  await clearItemImages();
-  updateHistoryCount();
-  exportNotice.hidden = true;
-  renderHistory();
+function updateSelectedHistory(){const selected=[...document.querySelectorAll('.history-select')].filter(c=>c.checked);document.querySelector('#deleteSelectedHistory').disabled=!selected.length;const all=[...document.querySelectorAll('.history-select')];document.querySelector('#selectAllHistory').checked=!!all.length&&all.every(c=>c.checked);}
+function formatRecordDate(value){const d=new Date(value);if(Number.isNaN(d.getTime()))return String(value||'');const pad=x=>String(x).padStart(2,'0');return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;}
+async function deleteSelectedHistory(){
+ const indices=new Set([...document.querySelectorAll('.history-select:checked')].map(c=>Number(c.dataset.index)));if(!indices.size)return;
+ if(!window.confirm(`Delete ${indices.size} selected item record(s)?`))return;
+ if(!window.confirm('Second confirmation: permanently delete selected records and their saved images? This cannot be undone.'))return;
+ const removed=measurementRecords.filter((_,i)=>indices.has(i));measurementRecords=measurementRecords.filter((_,i)=>!indices.has(i));
+ localStorage.setItem('object-measurement-records-v1',JSON.stringify(measurementRecords));
+ const retainedIds=new Set(measurementRecords.flatMap(r=>[r.productPhotoId,r.imageId,...(r.shots||[]).map(s=>s.imageId)].filter(Boolean)));
+ for(const r of removed){for(const id of [r.productPhotoId,r.imageId,...(r.shots||[]).map(s=>s.imageId)].filter(Boolean)){if(!retainedIds.has(id))await deleteItemImage(id);}}
+ updateHistoryCount();renderHistory();
 }
 
 async function exportMeasurementHistory() {
@@ -1447,7 +1455,9 @@ async function exportMeasurementHistory() {
 }
 
 async function exportItemImages() {
-  const imageRecords = await getAllItemImages();
+  const allImages = await getAllItemImages();
+  const referenced=new Set(measurementRecords.flatMap(r=>[r.productPhotoId,r.imageId,...(r.shots||[]).map(s=>s.imageId)].filter(Boolean)));
+  const imageRecords=allImages.filter(image=>referenced.has(image.id));
   if (!imageRecords.length) return;
   const files = {};
   const usedNames = new Set();
@@ -1546,50 +1556,29 @@ async function clearItemImages() {
   });
 }
 
-async function buildMeasurementWorkbook(records) {
-  const details=[['Barcode','Placement','Image No.','View','Horizontal (cm)','Vertical (cm)','Horizontal Axis','Vertical Axis','Frame','Image Filename','Measured At']];
-  const summary=[['Barcode','Placement','Length (cm)','Width (cm)','Height (cm)','Image 1 View','Image 2 View','Measured At','Item Photo']];
-  for(const r of records){
-    if(r.shots){
-      summary.push([r.barcode,r.placement,r.lengthCm,r.widthCm,r.heightCm,r.shots[0]?.view||'',r.shots[1]?.view||'Blank',formatRecordDate(r.measuredAt),'']);
-      r.shots.forEach((sh,i)=>{const axes=viewAxes[r.placement][sh.view];details.push([r.barcode,r.placement,i+1,sh.view,sh.horizontalCm,sh.verticalCm,axes[0],axes[1],sh.frameType,sh.imageFilename,formatRecordDate(r.measuredAt)]);});
-    }else{details.push([r.barcode,'Legacy',1,'Unknown',r.horizontalCm,r.verticalCm,'Unknown','Unknown',r.frameType,r.itemImageFilename,formatRecordDate(r.measuredAt)]);}
-  }
-  function sheetXml(rows, withPhotos=false){
-    const data=rows.map((row,i)=>`<row r="${i+1}">${row.map((v,j)=>{const ref=`${excelColumnName(j+1)}${i+1}`;return typeof v==='number'?`<c r="${ref}"><v>${v}</v></c>`:`<c r="${ref}" t="inlineStr"><is><t>${xmlEscape(String(v??''))}</t></is></c>`;}).join('')}</row>`).join('');
-    const heights=withPhotos?rows.slice(1).map((_,i)=>`<row r="${i+2}" ht="82" customHeight="1"/>`).join(''):'';
-    // Image row heights are applied directly to existing row tags (no duplicate row elements).
-    const adjusted=withPhotos?data.replace(/<row r="(\d+)"/g,(whole,n)=>Number(n)>1?`<row r="${n}" ht="82" customHeight="1"`:whole):data;
-    const cols=withPhotos?'<cols><col min="9" max="9" width="20" customWidth="1"/></cols>':'';
-    const drawing=withPhotos?'<drawing r:id="rId1"/>':'';
-    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${cols}<sheetData>${adjusted}</sheetData><autoFilter ref="A1:${excelColumnName(rows[0].length)}${rows.length}"/>${drawing}</worksheet>`;
-  }
-  const files={
-    '[Content_Types].xml':'<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>',
-    '_rels/.rels':'<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
-    'xl/workbook.xml':'<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Image Details" sheetId="1" r:id="rId1"/><sheet name="Item Dimensions" sheetId="2" r:id="rId2"/></sheets></workbook>',
-    'xl/_rels/workbook.xml.rels':'<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/></Relationships>',
-    'xl/worksheets/sheet1.xml':sheetXml(details),'xl/worksheets/sheet2.xml':sheetXml(summary,true)
-  };
-  // Embed the separately captured or uploaded item photo as an Excel picture.
-  const pictures=[];
-  for(let i=0;i<records.length;i++){
-    const productPhotoId=records[i].productPhotoId;
-    if(!productPhotoId)continue;
-    const stored=await getItemImage(productPhotoId);
-    if(!stored?.blob)continue;
-    let bytes=new Uint8Array(await stored.blob.arrayBuffer());
-    let extension=stored.blob.type==='image/png'?'png':'jpeg';
-    pictures.push({row:i+1,bytes,extension});
-  }
-  if(pictures.length){
-    files['[Content_Types].xml']=files['[Content_Types].xml'].replace('</Types>','<Default Extension="jpeg" ContentType="image/jpeg"/><Default Extension="png" ContentType="image/png"/><Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>');
-    files['xl/worksheets/_rels/sheet2.xml.rels']='<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>';
-    files['xl/drawings/_rels/drawing1.xml.rels']='<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+pictures.map((pic,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/front${i+1}.${pic.extension}"/>`).join('')+'</Relationships>';
-    files['xl/drawings/drawing1.xml']='<?xml version="1.0"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+pictures.map((pic,i)=>`<xdr:oneCellAnchor><xdr:from><xdr:col>8</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${pic.row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="1333500" cy="1000000"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${i+1}" name="Item photo ${i+1}"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rId${i+1}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1333500" cy="1000000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>`).join('')+'</xdr:wsDr>';
-    pictures.forEach((pic,i)=>{files[`xl/media/front${i+1}.${pic.extension}`]=pic.bytes;});
-  }
-  return new Blob([createStoredZip(files)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+async function buildMeasurementWorkbook(records){
+ const details=[['No.','Image','Barcode','Placement','View','Horizontal(cm)','Vertical(cm)','Frame','Measured At']];
+ const summary=[['No.','Item','Barcode','Placement','Length(cm)','Width(cm)','Height(cm)','Measured At']];
+ const detailPhotos=[],itemPhotos=[];let detailNo=0;
+ for(let i=0;i<records.length;i++){
+  const r=records[i];summary.push([i+1,'',r.barcode,r.placement||'Legacy',r.lengthCm??'',r.widthCm??'',r.heightCm??'',formatRecordDate(r.measuredAt)]);
+  if(r.productPhotoId){const stored=await getItemImage(r.productPhotoId);if(stored?.blob)itemPhotos.push({row:i+1,bytes:new Uint8Array(await stored.blob.arrayBuffer()),ext:stored.blob.type==='image/png'?'png':'jpeg'});}
+  const shots=r.shots?.length?r.shots:[{imageId:r.imageId,view:'Unknown',horizontalCm:r.horizontalCm,verticalCm:r.verticalCm,frameType:r.frameType}];
+  for(const shot of shots){detailNo++;details.push([detailNo,'',r.barcode,r.placement||'Legacy',shot.view||'Unknown',shot.horizontalCm??'',shot.verticalCm??'',shot.frameType||'',formatRecordDate(r.measuredAt)]);if(shot.imageId){const stored=await getItemImage(shot.imageId);if(stored?.blob)detailPhotos.push({row:detailNo,bytes:new Uint8Array(await stored.blob.arrayBuffer()),ext:stored.blob.type==='image/png'?'png':'jpeg'});}}
+ }
+ const xmlEscape=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+ function sheet(rows,photos){const body=rows.map((row,i)=>`<row r="${i+1}"${i?' ht="82" customHeight="1"':''}>`+row.map((v,j)=>{const ref=excelColumnName(j+1)+(i+1);return typeof v==='number'&&Number.isFinite(v)?`<c r="${ref}"><v>${v}</v></c>`:`<c r="${ref}" t="inlineStr"><is><t>${xmlEscape(v??'')}</t></is></c>`;}).join('')+'</row>').join('');return `<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><cols><col min="2" max="2" width="20" customWidth="1"/></cols><sheetData>${body}</sheetData><autoFilter ref="A1:${excelColumnName(rows[0].length)}${rows.length}"/>${photos.length?'<drawing r:id="rId1"/>':''}</worksheet>`;}
+ const types='http://schemas.openxmlformats.org/package/2006/content-types',rels='http://schemas.openxmlformats.org/package/2006/relationships';
+ const files={
+ '[Content_Types].xml':`<?xml version="1.0"?><Types xmlns="${types}"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpeg" ContentType="image/jpeg"/><Default Extension="png" ContentType="image/png"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>${detailPhotos.length?'<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>':''}${itemPhotos.length?'<Override PartName="/xl/drawings/drawing2.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>':''}</Types>`,
+ '_rels/.rels':`<?xml version="1.0"?><Relationships xmlns="${rels}"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
+ 'xl/workbook.xml':'<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Image Details" sheetId="1" r:id="rId1"/><sheet name="Item Dimensions" sheetId="2" r:id="rId2"/></sheets></workbook>',
+ 'xl/_rels/workbook.xml.rels':`<?xml version="1.0"?><Relationships xmlns="${rels}"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/></Relationships>`,
+ 'xl/worksheets/sheet1.xml':sheet(details,detailPhotos),'xl/worksheets/sheet2.xml':sheet(summary,itemPhotos)
+ };
+ function addPhotos(photos,num){if(!photos.length)return;files[`xl/worksheets/_rels/sheet${num}.xml.rels`]=`<?xml version="1.0"?><Relationships xmlns="${rels}"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing${num}.xml"/></Relationships>`;files[`xl/drawings/_rels/drawing${num}.xml.rels`]=`<?xml version="1.0"?><Relationships xmlns="${rels}">`+photos.map((p,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/photo${num}_${i+1}.${p.ext}"/>`).join('')+'</Relationships>';files[`xl/drawings/drawing${num}.xml`]='<?xml version="1.0"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+photos.map((p,i)=>`<xdr:oneCellAnchor><xdr:from><xdr:col>1</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${p.row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="1100000" cy="950000"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${i+1}" name="Photo ${i+1}"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rId${i+1}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>`).join('')+'</xdr:wsDr>';photos.forEach((p,i)=>files[`xl/media/photo${num}_${i+1}.${p.ext}`]=p.bytes);}
+ addPhotos(detailPhotos,1);addPhotos(itemPhotos,2);
+ return new Blob([createStoredZip(files)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
 }
 
 function excelColumnName(number) {

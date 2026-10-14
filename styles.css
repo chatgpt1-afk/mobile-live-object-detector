@@ -233,3 +233,6 @@ button.compact { flex: 0 0 auto; min-height: 38px; padding: 7px 12px; }
 /* Upload sits on its own row below Detect Object. */
 .upload-control-row { flex-basis: 100%; display: flex; }
 .upload-control-row button { width: 100%; }
+
+.history-controls{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:12px 0}.history-controls select{max-width:190px}.history-thumb{width:64px;height:64px;object-fit:contain}#photoEditControls{margin-top:10px;display:flex;flex-wrap:wrap;gap:8px}#cropPhotoStage{width:100%;flex-basis:100%}#cropPhotoCanvas{width:100%;max-height:350px;object-fit:contain;touch-action:none;border:1px solid #64748b}#productPhotoPreview{max-height:240px;object-fit:contain}
+#photoEditControls[hidden],#cropPhotoStage[hidden],#applyProductCrop[hidden],#cancelProductCrop[hidden]{display:none!important}
