@@ -241,9 +241,11 @@ button.compact { flex: 0 0 auto; min-height: 38px; padding: 7px 12px; }
 
 /* v0.13.8: keep touch targets away from Android's edge-back zones. */
 .frame-editor-stage { padding-inline: 38px; box-sizing: border-box; }
-.editor-scroll { width:100%; overflow:auto; overscroll-behavior:contain; border-radius:12px; touch-action:pan-x pan-y; }
-.editor-scroll #frameEditor { width:100%; max-width:none; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
-.editor-zoom { display:flex; align-items:center; gap:10px; margin-top:10px; }
-.editor-zoom input { flex:1; min-width:0; }
-.editor-zoom output { min-width:48px; text-align:right; }
+.editor-scroll { width:100%; overflow:hidden; overscroll-behavior:contain; border-radius:12px; position:relative; touch-action:none; }
+.editor-scroll #frameEditor { width:100%; max-width:none; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; transform-origin:0 0; }
+
 @media(max-width:420px) { .frame-editor-stage {padding-inline:36px;} }
+
+/* Single New Item control, anchored inside the camera preview. */
+.viewer { position: relative; }
+.new-item-corner { position: absolute; top: 12px; right: 12px; z-index: 8; padding: 9px 12px; border-radius: 9px; background: #18364f; color: #fff; border: 1px solid #92b8d0; font-weight: 650; cursor: pointer; }

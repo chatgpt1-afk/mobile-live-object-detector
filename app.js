@@ -59,7 +59,7 @@ const shotIndicator = document.querySelector('#shotIndicator');
 const dualStatus = document.querySelector('#dualStatus');
 const combinedDimensions = document.querySelector('#combinedDimensions');
 const saveDualItem = document.querySelector('#saveDualItem');
-const newDualItem = document.querySelector('#newDualItem');
+const newItemButton = document.querySelector('#newItemButton');
 let dualRecordSaved = false;
 let dualRecordSaving = false;
 let activeShot = 0;
@@ -90,8 +90,7 @@ function refreshDual(){
   combinedDimensions.textContent=`Length ${d.length?.toFixed(2)??'—'} · Width ${d.width?.toFixed(2)??'—'} · Height ${d.height?.toFixed(2)??'—'} cm`;
   saveDualItem.disabled=dualRecordSaved || dualRecordSaving || !dualShots[0] || (!dualShots[1] && shotView.value!=='blank');
   saveDualItem.textContent=dualRecordSaved?'Saved':(dualRecordSaving?'Saving...':'Save Both Images');
-  newDualItem.hidden=!dualRecordSaved;
-  if(dualRecordSaved){dualStatus.textContent='Saved successfully. Tap New Item to measure another product.';return;}
+  if(dualRecordSaved){dualStatus.textContent='Saved successfully. Use New Item above the camera to start another product.';return;}
   dualStatus.textContent=dualShots[activeShot]?`Image ${activeShot+1} confirmed (${dualShots[activeShot].view}). You can retake it.`:`Image ${activeShot+1}: ${activeShot===1&&shotView.value==='blank'?'No second image required; dimensions will remain incomplete.':'Capture, adjust frame, then confirm.'}`;
 }
 function showShot(index){
@@ -153,10 +152,18 @@ async function saveDualRecord(){
   updateHistoryCount();
   currentMeasurement={...dualShots[activeShot],saved:true};
   dualRecordSaved=true;dualRecordSaving=false;refreshDual();
-  if(record.status!=='Complete')dualStatus.textContent='Saved (Review Required: missing dimension). Tap New Item to continue.';
+  if(record.status!=='Complete')dualStatus.textContent='Saved (Review Required: missing dimension).';
 }
 saveDualItem.addEventListener('click',()=>saveDualRecord().catch(e=>{dualRecordSaving=false;refreshDual();dualStatus.textContent=`Save failed: ${e.message}`;}));
-newDualItem.addEventListener('click',()=>{if(!dualRecordSaved)return;prepareForNextBarcode();});
+// A single New Item action works before and after saving.
+newItemButton.addEventListener('click', () => {
+  if (dualRecordSaving) return;
+  if (!dualRecordSaved && (dualShots.some(Boolean) || currentMeasurement)) {
+    if (!confirm('Current unsaved measurements will be discarded. Start a new item?')) return;
+  }
+  resetDual();
+  prepareForNextBarcode();
+});
 
 const overlay = document.querySelector("#overlay");
 const overlayCtx = overlay.getContext("2d");
@@ -193,8 +200,8 @@ const undoFrameButton = document.querySelector("#undoFrame");
 const redoFrameButton = document.querySelector("#redoFrame");
 const resetFrameButton = document.querySelector("#resetFrame");
 const confirmFrameButton = document.querySelector("#confirmFrame");
-const saveCurrentRecordButton = document.querySelector("#saveCurrentRecordButton");
-const nextItemButton = document.querySelector("#nextItemButton");
+
+
 const barcodeDialog = document.querySelector("#barcodeDialog");
 const barcodeForm = document.querySelector("#barcodeForm");
 const barcodeInput = document.querySelector("#barcodeInput");
@@ -272,7 +279,7 @@ function markerHit(point) {
     point.y >= editableMarker.y && point.y <= editableMarker.y + editableMarker.height ? 'move' : null;
 }
 frameEditor.addEventListener('pointerdown', event => {
-  if (!markerPicking) return;
+  if (!markerPicking || editorTouches.size > 1 || editorViewGesture) return;
   event.stopImmediatePropagation();
   const point = editorPoint(event);
   const type = markerHit(point);
@@ -281,7 +288,7 @@ frameEditor.addEventListener('pointerdown', event => {
   markerGesture = { type, start: point, frame: { ...editableMarker } };
 }, {capture:true});
 frameEditor.addEventListener('pointermove', event => {
-  if (!markerPicking || !markerGesture) return;
+  if (!markerPicking || !markerGesture || editorTouches.size > 1 || editorViewGesture) return;
   event.stopImmediatePropagation();
   const point = editorPoint(event), start = markerGesture.frame;
   const dx = point.x-markerGesture.start.x, dy = point.y-markerGesture.start.y;
@@ -488,8 +495,8 @@ homeHistoryButton.addEventListener("click", openHistory);
 homeButton.addEventListener("click", () => requestRecordDecision("home"));
 scanBarcodeButton.addEventListener("click", startBarcodeScan);
 stopBarcodeScanButton.addEventListener("click", stopBarcodeScan);
-saveCurrentRecordButton.addEventListener("click", () => { dualStatus.textContent="Use Save Item (both images) above."; });
-nextItemButton.addEventListener("click", () => requestRecordDecision("next"));
+
+
 saveRecordButton.addEventListener("click", () => finishRecordDecision(true));
 skipSaveButton.addEventListener("click", () => finishRecordDecision(false));
 cancelNextItemButton.addEventListener("click", () => { pendingRecordAction = null; saveRecordDialog.close(); });
@@ -549,8 +556,6 @@ function useBarcode(value) {
   homePage.hidden = true;
   measurementPage.hidden = false;
   captureResult.hidden = true;
-  nextItemButton.hidden = true;
-  saveCurrentRecordButton.hidden = true;
   smoothedBox = null;
   lastValidBox = null;
   detectionActive = false;
@@ -911,8 +916,6 @@ async function captureCurrentObject(sourceCanvas = null) {
   captureButton.disabled = true;
   currentMeasurement = null;
   currentItemImageBlob = null;
-  nextItemButton.hidden = true;
-  saveCurrentRecordButton.hidden = true;
   captureButton.setAttribute("aria-label", "Capturing");
   captureButton.title = "Capturing";
   const full = document.createElement("canvas");
@@ -987,6 +990,7 @@ async function captureCurrentObject(sourceCanvas = null) {
   capturedFullCanvas = full;
   frameEditor.width = full.width;
   frameEditor.height = full.height;
+  resetEditorView();
   frameHistory = [{ ...editableFrame }];
   frameHistoryIndex = 0;
   manualFrameEnabled = false;
@@ -1130,7 +1134,7 @@ function frameHandles(frame) {
 }
 
 function beginFrameEdit(event) {
-  if (!manualFrameEnabled || !editableFrame) return;
+  if (!manualFrameEnabled || !editableFrame || editorTouches.size > 1 || editorViewGesture) return;
   const point = editorPoint(event);
   const rect = frameEditor.getBoundingClientRect();
   const tolerance = 32 * frameEditor.width / rect.width;
@@ -1143,7 +1147,7 @@ function beginFrameEdit(event) {
 }
 
 function moveFrameEdit(event) {
-  if (!frameGesture || !editableFrame) return;
+  if (!frameGesture || !editableFrame || editorTouches.size > 1 || editorViewGesture) return;
   const point = editorPoint(event);
   const dx = point.x - frameGesture.start.x;
   const dy = point.y - frameGesture.start.y;
@@ -1297,10 +1301,6 @@ async function confirmFrameAndMeasure() {
     itemImageFilename,
     saved: false
   };
-  saveCurrentRecordButton.hidden = true;
-  saveCurrentRecordButton.disabled = false;
-  saveCurrentRecordButton.textContent = "Save Current Record";
-  nextItemButton.hidden = true;
   if(dualShots[activeShot]?.previewUrl)URL.revokeObjectURL(dualShots[activeShot].previewUrl);
   dualShots[activeShot]={...currentMeasurement,view:currentShotView(),placement:dualPlacement,canvas:capturedFullCanvas,marker:capturedMarker,frame:{...editableFrame},blob:currentItemImageBlob,previewUrl:URL.createObjectURL(capturedBlob)};
   refreshDual();
@@ -1375,8 +1375,6 @@ async function persistCurrentMeasurement() {
   measurementRecords.push({ ...currentMeasurement });
   localStorage.setItem("object-measurement-records-v1", JSON.stringify(measurementRecords));
   updateHistoryCount();
-  saveCurrentRecordButton.disabled = true;
-  saveCurrentRecordButton.textContent = "Record Saved";
   analysisReason.textContent = imageSaved
     ? "Measurement and item-only image saved to History"
     : "Measurement saved; item image storage was unavailable";
@@ -1387,8 +1385,6 @@ function prepareForNextBarcode() {
   currentItemImageBlob = null;
   currentBarcode = "";
   captureResult.hidden = true;
-  nextItemButton.hidden = true;
-  saveCurrentRecordButton.hidden = true;
   detectionActive = false;
   smoothedBox = null;
   lastValidBox = null;
@@ -1967,17 +1963,91 @@ uploadImageInput.addEventListener('change', async () => {
   }
 });
 
-// Safe mobile editing: zoom affects display only; editor coordinates remain image pixels.
-const editorZoom = document.querySelector('#editorZoom');
-const editorZoomLabel = document.querySelector('#editorZoomLabel');
-const editorScroll = document.querySelector('#editorScroll');
-function updateEditorZoom(){
-  const scale=Number(editorZoom.value)/100;
-  frameEditor.style.width=`${scale*100}%`;
-  frameEditor.style.maxWidth='none';
-  editorZoomLabel.textContent=`${Math.round(scale*100)}%`;
+// Display-only pan/zoom. Frame coordinates always remain in original image pixels.
+const editorViewport = document.querySelector('#editorScroll');
+let editorScale = 1, editorPanX = 0, editorPanY = 0;
+const editorTouches = new Map();
+let editorViewGesture = null;
+const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
+function updateEditorView() {
+  const w = editorViewport.clientWidth, h = frameEditor.width ? w * frameEditor.height / frameEditor.width : 0;
+  const scaledWidth = w * editorScale, scaledHeight = h * editorScale;
+  editorPanX = clamp(editorPanX, Math.min(0, w - scaledWidth), 0);
+  editorPanY = clamp(editorPanY, Math.min(0, h - scaledHeight), 0);
+  frameEditor.style.transform = `translate(${editorPanX}px, ${editorPanY}px) scale(${editorScale})`;
+  editorViewport.style.height = `${h}px`;
 }
-editorZoom.addEventListener('input',updateEditorZoom);
-updateEditorZoom();
-// Prevent page scroll during a frame drag; system-level back gesture cannot be intercepted reliably.
-frameEditor.addEventListener('pointerdown', e=>{ if(manualFrameEnabled || markerPicking) e.preventDefault(); }, {passive:false});
+function resetEditorView() {
+  editorScale = 1; editorPanX = editorPanY = 0;
+  frameEditor.style.transform = '';
+  editorViewport.style.height = '';
+  requestAnimationFrame(updateEditorView);
+}
+function zoomEditorAt(nextScale, x, y) {
+  nextScale = clamp(nextScale, 1, 5);
+  const ratio = nextScale / editorScale;
+  editorPanX = x - (x - editorPanX) * ratio;
+  editorPanY = y - (y - editorPanY) * ratio;
+  editorScale = nextScale;
+  updateEditorView();
+}
+function editorLocalPoint(e) {
+  const r = editorViewport.getBoundingClientRect();
+  return {x:e.clientX-r.left, y:e.clientY-r.top};
+}
+function viewGestureStart() {
+  const pts=[...editorTouches.values()];
+  if(pts.length===2) {
+    frameGesture=null; markerGesture=null;
+    const mid={x:(pts[0].x+pts[1].x)/2,y:(pts[0].y+pts[1].y)/2};
+    editorViewGesture={kind:'pinch',distance:Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y),scale:editorScale,mid,panX:editorPanX,panY:editorPanY};
+  }
+}
+editorViewport.addEventListener('pointerdown',e=>{
+  if(frameEditorStage.hidden) return;
+  const p=editorLocalPoint(e); editorTouches.set(e.pointerId,p);
+  if(editorTouches.size===2) {
+    viewGestureStart();
+    e.preventDefault(); e.stopPropagation();
+  } else if(editorTouches.size===1) {
+    const pt=editorPoint(e);
+    const editingMarker=markerPicking && editableMarker;
+    const editingItem=manualFrameEnabled && editableFrame && !markerPicking;
+    const hit=editingMarker ? markerHit(pt) : editingItem ? (frameHandles(editableFrame).some(h=>Math.hypot(pt.x-h.x,pt.y-h.y)<=32*frameEditor.width/Math.max(frameEditor.getBoundingClientRect().width,1)) || (pt.x>=editableFrame.x&&pt.x<=editableFrame.x+editableFrame.width&&pt.y>=editableFrame.y&&pt.y<=editableFrame.y+editableFrame.height)) : false;
+    if(!hit && editorScale>1) editorViewGesture={kind:'pan',id:e.pointerId,point:p,panX:editorPanX,panY:editorPanY};
+  }
+}, {capture:true,passive:false});
+editorViewport.addEventListener('pointermove',e=>{
+  if(!editorTouches.has(e.pointerId)) return;
+  const p=editorLocalPoint(e); editorTouches.set(e.pointerId,p);
+  if(editorViewGesture?.kind==='pinch' && editorTouches.size>=2) {
+    const pts=[...editorTouches.values()].slice(0,2);
+    const mid={x:(pts[0].x+pts[1].x)/2,y:(pts[0].y+pts[1].y)/2};
+    const g=editorViewGesture, scale=clamp(g.scale*Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y)/Math.max(g.distance,1),1,5);
+    const ratio=scale/g.scale;
+    editorScale=scale;
+    editorPanX=mid.x-(g.mid.x-g.panX)*ratio;
+    editorPanY=mid.y-(g.mid.y-g.panY)*ratio;
+    updateEditorView(); e.preventDefault(); e.stopPropagation();
+  } else if(editorViewGesture?.kind==='pan' && editorViewGesture.id===e.pointerId) {
+    editorPanX=editorViewGesture.panX+p.x-editorViewGesture.point.x;
+    editorPanY=editorViewGesture.panY+p.y-editorViewGesture.point.y;
+    updateEditorView(); e.preventDefault(); e.stopPropagation();
+  }
+}, {capture:true,passive:false});
+function endEditorTouch(e) {
+  editorTouches.delete(e.pointerId);
+  if(editorViewGesture) {
+    editorViewGesture=null;
+    if(editorTouches.size===2) viewGestureStart();
+  }
+}
+editorViewport.addEventListener('pointerup',endEditorTouch,{capture:true});
+editorViewport.addEventListener('pointercancel',endEditorTouch,{capture:true});
+editorViewport.addEventListener('wheel',e=>{
+  if(frameEditorStage.hidden) return;
+  e.preventDefault();
+  const p=editorLocalPoint(e);
+  zoomEditorAt(editorScale*Math.exp(-e.deltaY*.002),p.x,p.y);
+},{passive:false});
+frameEditor.addEventListener('pointerdown',e=>{ if(manualFrameEnabled || markerPicking) e.preventDefault(); },{passive:false});
