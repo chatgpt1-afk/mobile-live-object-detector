@@ -119,6 +119,7 @@ const combinedDimensions = document.querySelector('#combinedDimensions');
 const saveDualItem = document.querySelector('#saveDualItem');
 const newItemButton = document.querySelector('#newItemButton');
 let dualRecordSaved = false;
+let nextItemTimer = null;
 let dualRecordSaving = false;
 let activeShot = 0;
 let dualShots = [null, null];
@@ -177,6 +178,8 @@ function showShot(index){
   refreshDual();
 }
 function resetDual(){
+  clearTimeout(nextItemTimer);
+  nextItemTimer = null;
   for(const shot of dualShots)if(shot?.previewUrl)URL.revokeObjectURL(shot.previewUrl);
   dualShots=[null,null];activeShot=0;dualPlacement=itemPlacement.value;dualRecordSaved=false;dualRecordSaving=false;
   shotView.value='front';refreshDual();
@@ -211,10 +214,18 @@ async function saveDualRecord(){
   currentMeasurement={...dualShots[activeShot],saved:true};
   dualRecordSaved=true;dualRecordSaving=false;refreshDual();
   if(record.status!=='Complete')dualStatus.textContent='Saved (Review Required: missing dimension).';
+  // Show Saved briefly, then reuse the existing New Item workflow.
+  nextItemTimer = setTimeout(() => {
+    nextItemTimer = null;
+    resetDual();
+    prepareForNextBarcode();
+  }, 900);
 }
 saveDualItem.addEventListener('click',()=>saveDualRecord().catch(e=>{dualRecordSaving=false;refreshDual();dualStatus.textContent=`Save failed: ${e.message}`;}));
 // A single New Item action works before and after saving.
 newItemButton.addEventListener('click', () => {
+  clearTimeout(nextItemTimer);
+  nextItemTimer = null;
   if (dualRecordSaving) return;
   if (!dualRecordSaved && (dualShots.some(Boolean) || currentMeasurement)) {
     if (!confirm('Current unsaved measurements will be discarded. Start a new item?')) return;
