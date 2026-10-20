@@ -161,38 +161,58 @@ function showMeasurementInputs(shot) {
   editHorizontalCm.value = shot.horizontalCm.toFixed(2);
   editVerticalCm.value = shot.verticalCm.toFixed(2);
 }
-async function applyManualMeasurement() {
-  const shot = dualShots[activeShot];
-  if (!shot || dualRecordSaved || dualRecordSaving) return;
-  const h = Number(editHorizontalCm.value), v = Number(editVerticalCm.value);
-  if (!Number.isFinite(h) || !Number.isFinite(v) || h <= 0 || v <= 0 || h > 10000 || v > 10000) {
-    dualStatus.textContent = 'Enter valid positive dimensions (up to 10000 cm).'; return;
-  }
-  shot.horizontalCm = Number(h.toFixed(2)); shot.verticalCm = Number(v.toFixed(2));
-  if (currentMeasurement) {currentMeasurement.horizontalCm=shot.horizontalCm;currentMeasurement.verticalCm=shot.verticalCm;}
-  horizontalSize.textContent = `${shot.horizontalCm.toFixed(2)} cm`;
-  verticalSize.textContent = `${shot.verticalCm.toFixed(2)} cm`;
-  analysisReason.textContent = 'Manually adjusted measurement';
-  // Rebuild the annotated image so the saved photo and exported numbers agree.
+// Keep the reference marker fixed: edited dimensions change the item rectangle, not the scale.
+let measurementRenderToken = 0;
+function renderManualMeasurement(shot) {
   const canvas=document.createElement('canvas');canvas.width=shot.canvas.width;canvas.height=shot.canvas.height;
   const ctx=canvas.getContext('2d');ctx.drawImage(shot.canvas,0,0);
   const lw=Math.max(6,canvas.width/220);ctx.lineWidth=lw;
   ctx.strokeStyle='#36e37e';ctx.strokeRect(shot.frame.x,shot.frame.y,shot.frame.width,shot.frame.height);
   if(shot.marker){ctx.strokeStyle='#00baff';ctx.strokeRect(shot.marker.x,shot.marker.y,shot.marker.width,shot.marker.height);}
   const font=Math.max(30,canvas.width/32);ctx.font=`700 ${font}px system-ui`;
-  const lines=[`Barcode: ${currentBarcode}`,`Horizontal: ${shot.horizontalCm.toFixed(2)} cm`,`Vertical: ${shot.verticalCm.toFixed(2)} cm`];
+  const lines=[`Barcode: ${shot.barcode}`,`Horizontal: ${shot.horizontalCm.toFixed(2)} cm`,`Vertical: ${shot.verticalCm.toFixed(2)} cm`];
   const pad=font*.45,w=Math.max(...lines.map(t=>ctx.measureText(t).width))+pad*2,bh=font*3.65;
   const x=Math.max(0,Math.min(canvas.width-w,shot.frame.x)),y=Math.max(0,Math.min(canvas.height-bh,shot.frame.y-bh-lw));
   ctx.fillStyle='rgba(0,0,0,.78)';ctx.fillRect(x,y,w,bh);ctx.fillStyle='#fff';
   lines.forEach((line,i)=>ctx.fillText(line,x+pad,y+font*(1.05+i*1.1)));
-  const blob=await canvasToBlob(canvas,.94);
-  if(dualShots[activeShot]!==shot)return;
-  if(shot.previewUrl)URL.revokeObjectURL(shot.previewUrl);
-  shot.previewUrl=URL.createObjectURL(blob);capturedPreview.src=shot.previewUrl;
+  return canvas;
+}
+function applyManualMeasurement() {
+  const shot = dualShots[activeShot];
+  if (!shot || dualRecordSaved || dualRecordSaving || !shot.marker) return;
+  const h = Number(editHorizontalCm.value), v = Number(editVerticalCm.value);
+  if (!editHorizontalCm.value || !editVerticalCm.value || !Number.isFinite(h) || !Number.isFinite(v) || h<=0 || v<=0 || h>10000 || v>10000) return;
+  const pxPerCm=((shot.marker.width+shot.marker.height)/2)/markerSizeCm;
+  const width=h*pxPerCm,height=v*pxPerCm;
+  if(width>shot.canvas.width || height>shot.canvas.height){
+    dualStatus.textContent='The requested frame exceeds the photo. Reduce the measurement.';
+    return;
+  }
+  const centerX=shot.frame.x+shot.frame.width/2,centerY=shot.frame.y+shot.frame.height/2;
+  shot.frame={x:Math.max(0,Math.min(shot.canvas.width-width,centerX-width/2)),y:Math.max(0,Math.min(shot.canvas.height-height,centerY-height/2)),width,height};
+  shot.horizontalCm=Number(h.toFixed(2));shot.verticalCm=Number(v.toFixed(2));
+  if(currentMeasurement){currentMeasurement.horizontalCm=shot.horizontalCm;currentMeasurement.verticalCm=shot.verticalCm;}
+  editableFrame={...shot.frame};
+  horizontalSize.textContent=`${shot.horizontalCm.toFixed(2)} cm`;
+  verticalSize.textContent=`${shot.verticalCm.toFixed(2)} cm`;
+  analysisReason.textContent='Manually adjusted measurement and frame';
+  const canvas=renderManualMeasurement(shot);
+  // Immediate preview on each keystroke; serialize the photo only after editing settles.
+  capturedPreview.src=canvas.toDataURL('image/jpeg',.88);
+  const token=++measurementRenderToken;
+  const shotIndex=activeShot;
+  clearTimeout(applyManualMeasurement.timer);
+  applyManualMeasurement.timer=setTimeout(async()=>{
+    const blob=await canvasToBlob(canvas,.94);
+    if(token!==measurementRenderToken || dualShots[shotIndex]!==shot)return;
+    if(shot.previewUrl)URL.revokeObjectURL(shot.previewUrl);
+    shot.previewUrl=URL.createObjectURL(blob);
+    if(activeShot===shotIndex)capturedPreview.src=shot.previewUrl;
+  },250);
   refreshDual();
 }
-editHorizontalCm.addEventListener('change',applyManualMeasurement);
-editVerticalCm.addEventListener('change',applyManualMeasurement);
+editHorizontalCm.addEventListener('input',applyManualMeasurement);
+editVerticalCm.addEventListener('input',applyManualMeasurement);
 function showShot(index){
   if(index<0||index>1)return;
   activeShot=index;
