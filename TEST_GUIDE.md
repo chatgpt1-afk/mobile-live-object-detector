@@ -1,1 +1,1 @@
-Measure both views. Edit horizontal/vertical: cyan frame and labels must update immediately, blue marker stays fixed. Switch views and verify independent values.
+1. Measure. Edit 19 to 25 cm: green frame grows and label changes. 2. Drag green corner: input values and photo labels update. 3. Drag inside frame: move without changing cm. 4. Switch shots and save; verify saved crops and dimensions.

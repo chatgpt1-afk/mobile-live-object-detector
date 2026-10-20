@@ -161,6 +161,56 @@ function showMeasurementInputs(shot) {
   editHorizontalCm.value = shot.horizontalCm.toFixed(2);
   editVerticalCm.value = shot.verticalCm.toFixed(2);
 }
+const resultFrameOverlay=document.querySelector('#resultFrameOverlay');
+let resultDrag=null;
+function syncResultOverlay(){
+  const shot=dualShots[activeShot];
+  if(!shot || capturedPreview.hidden || !frameEditorStage.hidden || dualRecordSaved){resultFrameOverlay.hidden=true;return;}
+  const rect=capturedPreview.getBoundingClientRect();
+  if(!rect.width || !rect.height){resultFrameOverlay.hidden=true;return;}
+  const scale=Math.min(rect.width/shot.canvas.width,rect.height/shot.canvas.height);
+  const w=shot.canvas.width*scale,h=shot.canvas.height*scale;
+  resultFrameOverlay.hidden=false;
+  resultFrameOverlay.style.left=`${(rect.width-w)/2}px`;
+  resultFrameOverlay.style.top=`${(rect.height-h)/2}px`;
+  resultFrameOverlay.style.width=`${w}px`;
+  resultFrameOverlay.style.height=`${h}px`;
+  resultFrameOverlay.width=shot.canvas.width;resultFrameOverlay.height=shot.canvas.height;
+  const ctx=resultFrameOverlay.getContext('2d');const f=shot.frame;
+  ctx.lineWidth=Math.max(4,shot.canvas.width/250);ctx.strokeStyle='#36e37e';
+  ctx.strokeRect(f.x,f.y,f.width,f.height);
+  if(shot.marker){ctx.strokeStyle='#00baff';ctx.strokeRect(shot.marker.x,shot.marker.y,shot.marker.width,shot.marker.height);}
+  if(!dualRecordSaving){ctx.fillStyle='#36e37e';ctx.strokeStyle='#fff';ctx.lineWidth=Math.max(2,shot.canvas.width/650);
+    for(const [x,y] of [[f.x,f.y],[f.x+f.width,f.y],[f.x,f.y+f.height],[f.x+f.width,f.y+f.height]]){
+      const r=Math.max(8,shot.canvas.width/130);ctx.fillRect(x-r,y-r,r*2,r*2);ctx.strokeRect(x-r,y-r,r*2,r*2);
+    }
+  }
+}
+function resultPoint(event){const r=resultFrameOverlay.getBoundingClientRect();return {x:(event.clientX-r.left)*resultFrameOverlay.width/r.width,y:(event.clientY-r.top)*resultFrameOverlay.height/r.height};}
+resultFrameOverlay.addEventListener('pointerdown',event=>{
+  const shot=dualShots[activeShot];if(!shot || dualRecordSaved || dualRecordSaving)return;
+  const pt=resultPoint(event),f=shot.frame,t=Math.max(22,shot.canvas.width/45);
+  const corners=[['nw',f.x,f.y],['ne',f.x+f.width,f.y],['sw',f.x,f.y+f.height],['se',f.x+f.width,f.y+f.height]];
+  let hit=corners.find(([,x,y])=>Math.hypot(x-pt.x,y-pt.y)<=t)?.[0];
+  if(!hit && pt.x>=f.x && pt.x<=f.x+f.width && pt.y>=f.y && pt.y<=f.y+f.height)hit='move';
+  if(!hit)return;
+  resultDrag={hit,start:pt,frame:{...f},shot};resultFrameOverlay.setPointerCapture(event.pointerId);event.preventDefault();
+});
+resultFrameOverlay.addEventListener('pointermove',event=>{
+  if(!resultDrag || dualRecordSaved)return;
+  const {hit,start,frame:f,shot}=resultDrag,pt=resultPoint(event),dx=pt.x-start.x,dy=pt.y-start.y;
+  const W=shot.canvas.width,H=shot.canvas.height,min=Math.max(4,W/500);
+  let l=f.x,r=f.x+f.width,t=f.y,b=f.y+f.height;
+  if(hit==='move') {const x=Math.max(0,Math.min(W-f.width,f.x+dx)),y=Math.max(0,Math.min(H-f.height,f.y+dy));l=x;r=x+f.width;t=y;b=y+f.height;}
+  else {if(hit.includes('w'))l=Math.max(0,Math.min(r-min,l+dx));if(hit.includes('e'))r=Math.min(W,Math.max(l+min,r+dx));if(hit.includes('n'))t=Math.max(0,Math.min(b-min,t+dy));if(hit.includes('s'))b=Math.min(H,Math.max(t+min,b+dy));}
+  shot.frame={x:l,y:t,width:r-l,height:b-t};
+  const px=((shot.marker.width+shot.marker.height)/2)/markerSizeCm;
+  shot.horizontalCm=Number((shot.frame.width/px).toFixed(2));shot.verticalCm=Number((shot.frame.height/px).toFixed(2));
+  editHorizontalCm.value=shot.horizontalCm.toFixed(2);editVerticalCm.value=shot.verticalCm.toFixed(2);
+  commitMeasurementFrame(shot);event.preventDefault();
+});
+for(const type of ['pointerup','pointercancel'])resultFrameOverlay.addEventListener(type,event=>{if(resultDrag){resultDrag=null;if(resultFrameOverlay.hasPointerCapture(event.pointerId))resultFrameOverlay.releasePointerCapture(event.pointerId);}});
+window.addEventListener('resize',syncResultOverlay);
 // Keep the reference marker fixed: edited dimensions change the item rectangle, not the scale.
 let measurementRenderToken = 0;
 function renderManualMeasurement(shot) {
@@ -191,16 +241,18 @@ function applyManualMeasurement() {
   const centerX=shot.frame.x+shot.frame.width/2,centerY=shot.frame.y+shot.frame.height/2;
   shot.frame={x:Math.max(0,Math.min(shot.canvas.width-width,centerX-width/2)),y:Math.max(0,Math.min(shot.canvas.height-height,centerY-height/2)),width,height};
   shot.horizontalCm=Number(h.toFixed(2));shot.verticalCm=Number(v.toFixed(2));
+  commitMeasurementFrame(shot);
+}
+function commitMeasurementFrame(shot){
   if(currentMeasurement){currentMeasurement.horizontalCm=shot.horizontalCm;currentMeasurement.verticalCm=shot.verticalCm;}
   editableFrame={...shot.frame};
   horizontalSize.textContent=`${shot.horizontalCm.toFixed(2)} cm`;
   verticalSize.textContent=`${shot.verticalCm.toFixed(2)} cm`;
   analysisReason.textContent='Manually adjusted measurement and frame';
   const canvas=renderManualMeasurement(shot);
-  // Immediate preview on each keystroke; serialize the photo only after editing settles.
   capturedPreview.src=canvas.toDataURL('image/jpeg',.88);
-  const token=++measurementRenderToken;
-  const shotIndex=activeShot;
+  syncResultOverlay();
+  const token=++measurementRenderToken,shotIndex=activeShot;
   clearTimeout(applyManualMeasurement.timer);
   applyManualMeasurement.timer=setTimeout(async()=>{
     const blob=await canvasToBlob(canvas,.94);
@@ -208,11 +260,18 @@ function applyManualMeasurement() {
     if(shot.previewUrl)URL.revokeObjectURL(shot.previewUrl);
     shot.previewUrl=URL.createObjectURL(blob);
     if(activeShot===shotIndex)capturedPreview.src=shot.previewUrl;
-  },250);
+    // The saved item crop must match the resized result frame.
+    const crop=document.createElement('canvas');crop.width=Math.max(1,Math.round(shot.frame.width));crop.height=Math.max(1,Math.round(shot.frame.height));
+    crop.getContext('2d').drawImage(shot.canvas,shot.frame.x,shot.frame.y,shot.frame.width,shot.frame.height,0,0,crop.width,crop.height);
+    shot.blob=await canvasToBlob(crop,.94);
+    if(activeShot===shotIndex)currentItemImageBlob=shot.blob;
+    syncResultOverlay();
+  },180);
   refreshDual();
 }
 editHorizontalCm.addEventListener('input',applyManualMeasurement);
 editVerticalCm.addEventListener('input',applyManualMeasurement);
+
 function showShot(index){
   if(index<0||index>1)return;
   activeShot=index;
@@ -232,11 +291,13 @@ function showShot(index){
     verticalSize.textContent=`${shot.verticalCm.toFixed(2)} cm`;
     analysisStatus.textContent='MEASURED';
     showMeasurementInputs(shot);
+    requestAnimationFrame(syncResultOverlay);
   }else{
     captureResult.hidden=true;
     currentMeasurement=null;
     capturedPreview.hidden=true;
     showMeasurementInputs(null);
+    resultFrameOverlay.hidden=true;
   }
   refreshDual();
 }
@@ -262,6 +323,8 @@ async function saveDualRecord(){
   if(!dualShots[0])return;
   if(!dualShots[1]&&shotView.value!=='blank')return;
   if(!currentProductPhotoBlob){dualStatus.textContent='Item photo required. Return to barcode step.';return;}
+  // Finish pending preview and crop updates before persisting.
+  if(applyManualMeasurement.timer){clearTimeout(applyManualMeasurement.timer);applyManualMeasurement.timer=null;for(const shot of dualShots){if(!shot)continue;const crop=document.createElement("canvas");crop.width=Math.max(1,Math.round(shot.frame.width));crop.height=Math.max(1,Math.round(shot.frame.height));crop.getContext("2d").drawImage(shot.canvas,shot.frame.x,shot.frame.y,shot.frame.width,shot.frame.height,0,0,crop.width,crop.height);shot.blob=await canvasToBlob(crop,.94);}}
   dualRecordSaving=true;refreshDual();
   const productPhotoId=crypto.randomUUID?crypto.randomUUID():`photo-${Date.now()}`;
   await saveItemImage(productPhotoId,`${currentBarcode}_product.jpg`,currentProductPhotoBlob);
@@ -1497,6 +1560,7 @@ async function confirmFrameAndMeasure() {
   dualShots[activeShot]={...currentMeasurement,view:currentShotView(),placement:dualPlacement,canvas:capturedFullCanvas,marker:capturedMarker,frame:{...editableFrame},blob:currentItemImageBlob,previewUrl:URL.createObjectURL(capturedBlob)};
   showMeasurementInputs(dualShots[activeShot]);
   refreshDual();
+  requestAnimationFrame(syncResultOverlay);
 }
 
 function downloadBlob(blob, filename) {
