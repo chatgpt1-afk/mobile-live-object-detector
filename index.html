@@ -9,11 +9,11 @@
   <title>Live Object Frame</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=0.14.5">
+  <link rel="stylesheet" href="styles.css?v=0.14.6">
 </head>
 <body>
   <main id="homePage" class="home-page">
-    <p class="eyebrow">OBJECT MEASUREMENT · VERSION 0.14.5</p>
+    <p class="eyebrow">OBJECT MEASUREMENT · VERSION 0.14.6</p>
     <h1>Measure products with your phone</h1>
     <p>Frame one product with the printed reference marker, confirm the object frame, then save the measurement.</p>
     <button id="startMeasurementButton" class="primary" type="button">Start Measurement</button>
@@ -23,7 +23,7 @@
   <main id="measurementPage" class="app-shell" hidden>
     <header class="topbar">
       <div>
-        <p class="eyebrow">PHASE 2B · VERSION 0.14.5</p>
+        <p class="eyebrow">PHASE 2B · VERSION 0.14.6</p>
         <h1>Live Object Frame</h1>
       </div>
       <div class="header-actions">
@@ -51,8 +51,7 @@
 
     <section class="controls">
       <button id="startButton" class="primary" type="button">Open Camera</button>
-      <button id="calibrateButton" type="button" disabled>Set Empty Background</button>
-      <button id="detectButton" type="button" disabled>Detect Object</button>
+      <button id="calibrateButton" type="button" hidden disabled>Set Empty Background</button><button id="detectButton" type="button" hidden disabled>Detect Object</button>
       <div class="upload-control-row"><button id="uploadImageButton" type="button">Upload Image</button><input id="uploadImageInput" type="file" accept="image/*" hidden></div>
     </section>
 
@@ -76,7 +75,7 @@
       </div>
     </section>
 
-    <section class="dual-config"><label>Item Placement <select id="itemPlacement"><option value="upright">Upright / 竖着</option><option value="horizontal">Horizontal / 横着</option></select></label><div class="dual-nav"><button id="previousShot" type="button">← First image</button><strong id="shotIndicator">Image 1 / 2</strong><button id="nextShot" type="button">Second image →</button></div><label>Current Image View <select id="shotView"><option value="front">Front view</option><option value="side">Side view</option><option value="top">Top view</option><option value="blank">Blank (second only)</option></select></label><p id="dualStatus" class="measurement-note">Capture and confirm the first image, then move to the second.</p><div id="combinedDimensions" class="dual-summary">Length — · Width — · Height —</div><button id="saveDualItem" type="button" class="primary" disabled>Save Both Images</button></section><section id="captureResult" class="capture-result" hidden>
+    <section class="dual-config"><label>Item Placement <select id="itemPlacement"><option value="upright">Upright / 竖着</option><option value="horizontal">Horizontal / 横着</option></select></label><div class="placement-examples" aria-label="Item placement examples"><div class="placement-example" data-placement="upright"><svg viewBox="0 0 140 100" aria-label="Upright standing box"><polygon points="45,18 87,18 110,34 68,34" fill="#a7c8ec"/><polygon points="68,34 110,34 110,89 68,89" fill="#5884ba"/><polygon points="45,18 68,34 68,89 45,73" fill="#7ba7d6"/><path d="M45 18H87L110 34V89H68L45 73Z M68 34V89 M45 18L68 34L110 34" fill="none" stroke="#24486e" stroke-width="2"/></svg><strong>Upright</strong><small>Standing tall</small></div><div class="placement-example" data-placement="horizontal"><svg viewBox="0 0 140 100" aria-label="Horizontal lying box"><polygon points="18,49 93,49 122,31 47,31" fill="#a7c8ec"/><polygon points="93,49 122,31 122,65 93,83" fill="#5884ba"/><polygon points="18,49 93,49 93,83 18,83" fill="#7ba7d6"/><path d="M18 49L47 31H122V65L93 83H18Z M18 49H93L122 31 M93 49V83" fill="none" stroke="#24486e" stroke-width="2"/></svg><strong>Horizontal</strong><small>Lying flat</small></div></div><div class="dual-nav"><button id="previousShot" type="button">← First image</button><strong id="shotIndicator">Image 1 / 2</strong><button id="nextShot" type="button">Second image →</button></div><label>Current Image View <select id="shotView"><option value="front">Front view</option><option value="side">Side view</option><option value="top">Top view</option><option value="blank">Blank (second only)</option></select></label><p id="dualStatus" class="measurement-note">Capture and confirm the first image, then move to the second.</p><div id="combinedDimensions" class="dual-summary">Length — · Width — · Height —</div><button id="saveDualItem" type="button" class="primary" disabled>Save Both Images</button></section><section id="captureResult" class="capture-result" hidden>
       <div class="result-heading">
         <div>
           <p class="eyebrow">CAPTURE ANALYSIS</p>
@@ -98,6 +97,7 @@
         <button id="confirmFrame" class="save-button" type="button">Confirm Frame &amp; Measure</button>
       </div>
       <img id="capturedPreview" alt="Measured object with frame and dimensions" hidden>
+      <div id="manualMeasurement" class="manual-measurement" hidden><strong>Measurement Result (editable)</strong><div class="measurement-inputs"><label>Horizontal (cm)<input id="editHorizontalCm" type="number" min="0.01" max="10000" step="0.01" inputmode="decimal"></label><label>Vertical (cm)<input id="editVerticalCm" type="number" min="0.01" max="10000" step="0.01" inputmode="decimal"></label></div><small>Changes update this image's measurements and the final item dimensions automatically.</small></div>
       <div class="capture-metrics">
         <div><span>Analysis status</span><strong id="analysisStatus">—</strong></div>
         <div><span>Reason</span><strong id="analysisReason">—</strong></div>
@@ -204,6 +204,6 @@
   </dialog>
 
   <canvas id="processingCanvas" hidden></canvas>
-  <script src="app.js?v=0.14.5" defer></script>
+  <script src="app.js?v=0.14.6" defer></script>
 </body>
 </html>

@@ -152,6 +152,47 @@ function refreshDual(){
   if(dualRecordSaved){dualStatus.textContent='Saved successfully. Use New Item above the camera to start another product.';return;}
   dualStatus.textContent=dualShots[activeShot]?`Image ${activeShot+1} confirmed (${dualShots[activeShot].view}). You can retake it.`:`Image ${activeShot+1}: ${activeShot===1&&shotView.value==='blank'?'No second image required; dimensions will remain incomplete.':'Capture, adjust frame, then confirm.'}`;
 }
+const manualMeasurement = document.querySelector('#manualMeasurement');
+const editHorizontalCm = document.querySelector('#editHorizontalCm');
+const editVerticalCm = document.querySelector('#editVerticalCm');
+function showMeasurementInputs(shot) {
+  manualMeasurement.hidden = !shot;
+  if (!shot) return;
+  editHorizontalCm.value = shot.horizontalCm.toFixed(2);
+  editVerticalCm.value = shot.verticalCm.toFixed(2);
+}
+async function applyManualMeasurement() {
+  const shot = dualShots[activeShot];
+  if (!shot || dualRecordSaved || dualRecordSaving) return;
+  const h = Number(editHorizontalCm.value), v = Number(editVerticalCm.value);
+  if (!Number.isFinite(h) || !Number.isFinite(v) || h <= 0 || v <= 0 || h > 10000 || v > 10000) {
+    dualStatus.textContent = 'Enter valid positive dimensions (up to 10000 cm).'; return;
+  }
+  shot.horizontalCm = Number(h.toFixed(2)); shot.verticalCm = Number(v.toFixed(2));
+  if (currentMeasurement) {currentMeasurement.horizontalCm=shot.horizontalCm;currentMeasurement.verticalCm=shot.verticalCm;}
+  horizontalSize.textContent = `${shot.horizontalCm.toFixed(2)} cm`;
+  verticalSize.textContent = `${shot.verticalCm.toFixed(2)} cm`;
+  analysisReason.textContent = 'Manually adjusted measurement';
+  // Rebuild the annotated image so the saved photo and exported numbers agree.
+  const canvas=document.createElement('canvas');canvas.width=shot.canvas.width;canvas.height=shot.canvas.height;
+  const ctx=canvas.getContext('2d');ctx.drawImage(shot.canvas,0,0);
+  const lw=Math.max(6,canvas.width/220);ctx.lineWidth=lw;
+  ctx.strokeStyle='#36e37e';ctx.strokeRect(shot.frame.x,shot.frame.y,shot.frame.width,shot.frame.height);
+  if(shot.marker){ctx.strokeStyle='#00baff';ctx.strokeRect(shot.marker.x,shot.marker.y,shot.marker.width,shot.marker.height);}
+  const font=Math.max(30,canvas.width/32);ctx.font=`700 ${font}px system-ui`;
+  const lines=[`Barcode: ${currentBarcode}`,`Horizontal: ${shot.horizontalCm.toFixed(2)} cm`,`Vertical: ${shot.verticalCm.toFixed(2)} cm`];
+  const pad=font*.45,w=Math.max(...lines.map(t=>ctx.measureText(t).width))+pad*2,bh=font*3.65;
+  const x=Math.max(0,Math.min(canvas.width-w,shot.frame.x)),y=Math.max(0,Math.min(canvas.height-bh,shot.frame.y-bh-lw));
+  ctx.fillStyle='rgba(0,0,0,.78)';ctx.fillRect(x,y,w,bh);ctx.fillStyle='#fff';
+  lines.forEach((line,i)=>ctx.fillText(line,x+pad,y+font*(1.05+i*1.1)));
+  const blob=await canvasToBlob(canvas,.94);
+  if(dualShots[activeShot]!==shot)return;
+  if(shot.previewUrl)URL.revokeObjectURL(shot.previewUrl);
+  shot.previewUrl=URL.createObjectURL(blob);capturedPreview.src=shot.previewUrl;
+  refreshDual();
+}
+editHorizontalCm.addEventListener('change',applyManualMeasurement);
+editVerticalCm.addEventListener('change',applyManualMeasurement);
 function showShot(index){
   if(index<0||index>1)return;
   activeShot=index;
@@ -170,10 +211,12 @@ function showShot(index){
     horizontalSize.textContent=`${shot.horizontalCm.toFixed(2)} cm`;
     verticalSize.textContent=`${shot.verticalCm.toFixed(2)} cm`;
     analysisStatus.textContent='MEASURED';
+    showMeasurementInputs(shot);
   }else{
     captureResult.hidden=true;
     currentMeasurement=null;
     capturedPreview.hidden=true;
+    showMeasurementInputs(null);
   }
   refreshDual();
 }
@@ -184,7 +227,9 @@ function resetDual(){
   dualShots=[null,null];activeShot=0;dualPlacement=itemPlacement.value;dualRecordSaved=false;dualRecordSaving=false;
   shotView.value='front';refreshDual();
 }
-itemPlacement.addEventListener('change',()=>{dualPlacement=itemPlacement.value;refreshDual();});
+function updatePlacementExamples(){document.querySelectorAll('.placement-example').forEach(el=>el.classList.toggle('selected',el.dataset.placement===itemPlacement.value));}
+itemPlacement.addEventListener('change',()=>{dualPlacement=itemPlacement.value;refreshDual();updatePlacementExamples();});
+updatePlacementExamples();
 shotView.addEventListener('change',()=>{if(activeShot===1&&dualShots[1]){dualShots[1].view=shotView.value;}refreshDual();});
 document.querySelector('#previousShot').addEventListener('click',()=>showShot(0));
 document.querySelector('#nextShot').addEventListener('click',()=>showShot(1));
@@ -746,6 +791,25 @@ function stopBarcodeScan() {
   stopBarcodeScanButton.hidden = true;
 }
 
+const AUTO_REFRESH_MS = 10000;
+let autoRefreshTimer = null;
+let calibrationBusy = false;
+async function refreshCameraAnalysis() {
+  if (!running || calibrationBusy || video.readyState < 2) return;
+  // Preserve the background while a product is in view: otherwise a timed
+  // refresh would learn the product as background and hide it.
+  if (backgroundFrame && lastValidBox) { beginDetection(); return; }
+  calibrationBusy = true;
+  try {
+    const newBackground = await captureAveragedBackground(6);
+    if (!running) return;
+    backgroundFrame = newBackground;
+    beginDetection();
+    detectionStatus.textContent = 'Automatic detection active';
+  } catch (error) {
+    console.warn('Automatic background refresh failed', error);
+  } finally { calibrationBusy = false; }
+}
 async function startCamera() {
   if (!navigator.mediaDevices?.getUserMedia) {
     showCameraError("Camera requires HTTPS or localhost.");
@@ -776,7 +840,10 @@ async function startCamera() {
     detectionActive = false;
     detectionStatus.textContent = "Empty background required";
     markerStatus.textContent = "Waiting for background";
-    liveMessage.textContent = "Remove the item and marker, then tap Set Empty Background";
+    liveMessage.textContent = "Automatic background and object detection. For best results, start with an empty surface.";
+    await refreshCameraAnalysis();
+    clearInterval(autoRefreshTimer);
+    autoRefreshTimer = setInterval(refreshCameraAnalysis, AUTO_REFRESH_MS);
     requestAnimationFrame(processLoop);
   } catch (error) {
     const reason = error?.name === "NotAllowedError"
@@ -787,6 +854,7 @@ async function startCamera() {
 }
 
 function stopCamera() {
+  clearInterval(autoRefreshTimer); autoRefreshTimer = null;
   running = false;
   stream?.getTracks().forEach(track => track.stop());
   stream = null;
@@ -931,7 +999,7 @@ function processFrame() {
   liveMessage.textContent = candidate.touchesEdge
     ? "Move back: part of the item may be outside the picture"
     : stableFrames < 3 ? "Hold steady — preparing Capture" : "Item ready — make sure the marker is also visible, then Capture";
-  if (!captureButton.disabled) detectButton.textContent = "Detect New Object";
+
 }
 
 function boxIoU(a, b) {
@@ -1407,6 +1475,7 @@ async function confirmFrameAndMeasure() {
   };
   if(dualShots[activeShot]?.previewUrl)URL.revokeObjectURL(dualShots[activeShot].previewUrl);
   dualShots[activeShot]={...currentMeasurement,view:currentShotView(),placement:dualPlacement,canvas:capturedFullCanvas,marker:capturedMarker,frame:{...editableFrame},blob:currentItemImageBlob,previewUrl:URL.createObjectURL(capturedBlob)};
+  showMeasurementInputs(dualShots[activeShot]);
   refreshDual();
 }
 

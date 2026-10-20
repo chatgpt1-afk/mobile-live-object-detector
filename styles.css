@@ -261,3 +261,5 @@ button.compact { flex: 0 0 auto; min-height: 38px; padding: 7px 12px; }
 
 /* Crop frame stays aligned with photo pixels on every screen size. */
 #cropPhotoCanvas{display:block;width:100%;height:auto;max-height:none;object-fit:fill;touch-action:none;user-select:none;-webkit-user-select:none}
+
+.placement-examples{display:grid;grid-template-columns:1fr 1fr;gap:10px}.placement-example{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px;border:2px solid #d7e1ec;border-radius:12px;background:#f8fbff}.placement-example.selected{border-color:#2488d6;background:#eaf5ff}.placement-example svg{width:100%;max-width:155px;height:94px}.placement-example small{font-weight:400;color:#5b7185}.manual-measurement{padding:12px;border:1px solid #91badc;border-radius:12px;background:#f2f8ff;margin-top:12px}.measurement-inputs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}.measurement-inputs label{font-weight:600;font-size:.85rem}.measurement-inputs input{width:100%;box-sizing:border-box;padding:10px;border:1px solid #a8bed2;border-radius:8px;font-size:1rem}.manual-measurement small{color:#5b7185}
