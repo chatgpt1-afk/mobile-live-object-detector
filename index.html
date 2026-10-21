@@ -9,11 +9,11 @@
   <title>Live Object Frame</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=0.14.8">
+  <link rel="stylesheet" href="styles.css?v=0.14.9">
 </head>
 <body>
   <main id="homePage" class="home-page">
-    <p class="eyebrow">OBJECT MEASUREMENT · VERSION 0.14.8</p>
+    <p class="eyebrow">OBJECT MEASUREMENT · VERSION 0.14.9</p>
     <h1>Measure products with your phone</h1>
     <p>Frame one product with the printed reference marker, confirm the object frame, then save the measurement.</p>
     <button id="startMeasurementButton" class="primary" type="button">Start Measurement</button>
@@ -23,7 +23,7 @@
   <main id="measurementPage" class="app-shell" hidden>
     <header class="topbar">
       <div>
-        <p class="eyebrow">PHASE 2B · VERSION 0.14.8</p>
+        <p class="eyebrow">PHASE 2B · VERSION 0.14.9</p>
         <h1>Live Object Frame</h1>
       </div>
       <div class="header-actions">
@@ -75,7 +75,7 @@
       </div>
     </section>
 
-    <section class="dual-config"><label>Item Placement <select id="itemPlacement"><option value="upright">Upright / 竖着</option><option value="horizontal">Horizontal / 横着</option></select></label><div class="placement-examples" aria-label="Item placement examples"><div class="placement-example" data-placement="upright"><svg viewBox="0 0 140 100" aria-label="Upright standing box"><polygon points="45,18 87,18 110,34 68,34" fill="#a7c8ec"/><polygon points="68,34 110,34 110,89 68,89" fill="#5884ba"/><polygon points="45,18 68,34 68,89 45,73" fill="#7ba7d6"/><path d="M45 18H87L110 34V89H68L45 73Z M68 34V89 M45 18L68 34L110 34" fill="none" stroke="#24486e" stroke-width="2"/></svg><strong>Upright</strong><small>Standing tall</small></div><div class="placement-example" data-placement="horizontal"><svg viewBox="0 0 140 100" aria-label="Horizontal lying box"><polygon points="18,49 93,49 122,31 47,31" fill="#a7c8ec"/><polygon points="93,49 122,31 122,65 93,83" fill="#5884ba"/><polygon points="18,49 93,49 93,83 18,83" fill="#7ba7d6"/><path d="M18 49L47 31H122V65L93 83H18Z M18 49H93L122 31 M93 49V83" fill="none" stroke="#24486e" stroke-width="2"/></svg><strong>Horizontal</strong><small>Lying flat</small></div></div><div class="dual-nav"><button id="previousShot" type="button">← First image</button><strong id="shotIndicator">Image 1 / 2</strong><button id="nextShot" type="button">Second image →</button></div><label>Current Image View <select id="shotView"><option value="front">Front view</option><option value="side">Side view</option><option value="top">Top view</option><option value="blank">Blank (second only)</option></select></label><p id="dualStatus" class="measurement-note">Capture and confirm the first image, then move to the second.</p><div id="combinedDimensions" class="dual-summary">Length — · Width — · Height —</div><button id="saveDualItem" type="button" class="primary" disabled>Save Both Images</button></section><section id="captureResult" class="capture-result" hidden>
+    <section class="dual-config"><div class="placement-title">Item Placement</div><select id="itemPlacement" hidden aria-label="Item Placement"><option value="upright">Upright</option><option value="horizontal">Horizontal</option></select><div class="placement-examples" aria-label="Item placement examples"><button type="button" class="placement-example" data-placement="upright" aria-pressed="true"><svg viewBox="0 0 140 100" aria-label="Upright standing box"><polygon points="45,18 87,18 110,34 68,34" fill="#a7c8ec"/><polygon points="68,34 110,34 110,89 68,89" fill="#5884ba"/><polygon points="45,18 68,34 68,89 45,73" fill="#7ba7d6"/><path d="M45 18H87L110 34V89H68L45 73Z M68 34V89 M45 18L68 34L110 34" fill="none" stroke="#24486e" stroke-width="2"/></svg><strong>Upright</strong><small>Standing tall</small></button><button type="button" class="placement-example" data-placement="horizontal" aria-pressed="false"><svg viewBox="0 0 140 100" aria-label="Horizontal lying box"><polygon points="18,49 93,49 122,31 47,31" fill="#a7c8ec"/><polygon points="93,49 122,31 122,65 93,83" fill="#5884ba"/><polygon points="18,49 93,49 93,83 18,83" fill="#7ba7d6"/><path d="M18 49L47 31H122V65L93 83H18Z M18 49H93L122 31 M93 49V83" fill="none" stroke="#24486e" stroke-width="2"/></svg><strong>Horizontal</strong><small>Lying flat</small></button></div><div class="dual-nav"><button id="previousShot" type="button">← First image</button><strong id="shotIndicator">Image 1 / 2</strong><button id="nextShot" type="button">Second image →</button></div><label>Current Image View <select id="shotView"><option value="front">Front view</option><option value="side">Side view</option><option value="top">Top view</option><option value="blank">Blank (second only)</option></select></label><p id="dualStatus" class="measurement-note">Capture and confirm the first image, then move to the second.</p><div id="combinedDimensions" class="dual-summary">Length — · Width — · Height —</div><button id="saveDualItem" type="button" class="primary" disabled>Save Both Images</button></section><section id="captureResult" class="capture-result" hidden>
       <div class="result-heading">
         <div>
           <p class="eyebrow">CAPTURE ANALYSIS</p>
@@ -152,7 +152,7 @@
         <span>Barcode</span>
         <input id="barcodeInput" type="text" autocomplete="off" enterkeyhint="done" placeholder="Key in product barcode" required>
       </label>
-      <div class="product-photo-input"><label>Item Photo (required)</label><div class="product-photo-actions"><button id="takeProductPhoto" type="button">Capture Item Photo</button><button id="uploadProductPhoto" type="button">Upload Item Photo</button></div><input id="productPhotoInput" type="file" accept="image/*" hidden><input id="productPhotoCamera" type="file" accept="image/*" capture="environment" hidden><img id="productPhotoPreview" alt="Item photo preview" hidden><div id="photoEditControls" hidden><div class="photo-rotate-row"><button id="rotatePhotoLeft" type="button" aria-label="Rotate left" title="Rotate left">↶</button><span>Rotate</span><button id="rotatePhotoRight" type="button" aria-label="Rotate right" title="Rotate right">↷</button></div><button id="cropProductPhoto" type="button">Crop Image</button><div id="cropPhotoStage" hidden><canvas id="cropPhotoCanvas"></canvas><small>Drag the green frame to move it, or drag its handles to resize.</small></div><div id="cropPhotoActions" hidden><button id="applyProductCrop" type="button" hidden>Apply Crop</button><button id="cancelProductCrop" type="button" hidden>Cancel Crop</button></div></div><small>Required before Continue. This photo will appear in Item Dimensions.</small></div><p id="barcodeMessage" class="dialog-message">Key in the barcode or scan it using the phone camera.</p>
+      <div class="product-photo-input"><label>Item Photo (required)</label><div class="product-photo-actions"><button id="takeProductPhoto" type="button" aria-label="Capture Item Photo" title="Capture Item Photo">📷</button><button id="uploadProductPhoto" type="button" aria-label="Upload Item Photo" title="Upload Item Photo">⬆</button></div><input id="productPhotoInput" type="file" accept="image/*" hidden><input id="productPhotoCamera" type="file" accept="image/*" capture="environment" hidden><img id="productPhotoPreview" alt="Item photo preview" hidden><div id="photoEditControls" hidden><div class="photo-rotate-row"><button id="rotatePhotoLeft" type="button" aria-label="Rotate left" title="Rotate left">↶</button><span>Rotate</span><button id="rotatePhotoRight" type="button" aria-label="Rotate right" title="Rotate right">↷</button></div><div class="photo-edit-actions"><button id="cropProductPhoto" type="button" title="Crop Image" aria-label="Crop Image">✂</button><button id="removeProductBackground" type="button" title="Remove Background" aria-label="Remove Background">◩</button></div><div id="cropPhotoStage" hidden><canvas id="cropPhotoCanvas"></canvas><small>Drag the green frame to move it, or drag its handles to resize.</small></div><div id="cropPhotoActions" hidden><button id="applyProductCrop" type="button" hidden title="Apply Crop" aria-label="Apply Crop">✓</button><button id="cancelProductCrop" type="button" hidden title="Cancel Crop" aria-label="Cancel Crop">✕</button></div></div><small>Required before Continue. This photo will appear in Item Dimensions.</small></div><p id="barcodeMessage" class="dialog-message">Key in the barcode or scan it using the phone camera.</p>
       <video id="barcodeVideo" class="barcode-video" autoplay muted playsinline hidden></video>
       <div class="dialog-actions">
         <button id="scanBarcodeButton" type="button">Scan Barcode</button>
@@ -204,6 +204,6 @@
   </dialog>
 
   <canvas id="processingCanvas" hidden></canvas>
-  <script src="app.js?v=0.14.8" defer></script>
+  <script src="app.js?v=0.14.9" defer></script>
 </body>
 </html>

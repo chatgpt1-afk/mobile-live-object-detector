@@ -266,3 +266,6 @@ button.compact { flex: 0 0 auto; min-height: 38px; padding: 7px 12px; }
 
 .result-image-stage{position:relative;width:100%;max-width:100%;touch-action:pan-y}
 #resultFrameOverlay{position:absolute;z-index:2;touch-action:none;cursor:crosshair;border-radius:12px}
+
+/* v0.14.9: image placement picker and compact photo controls */
+.placement-example{cursor:pointer;font:inherit;color:inherit;min-width:0}.placement-example:disabled{opacity:.65;cursor:not-allowed}.placement-example:focus-visible{outline:3px solid #2488d6;outline-offset:3px}.placement-title{font-weight:700;margin-bottom:8px}.photo-edit-actions{display:flex;gap:8px}.photo-edit-actions button,.product-photo-actions button{min-width:46px;min-height:44px;font-size:23px}.product-photo-actions button{flex:1}.photo-edit-actions button{flex:1}

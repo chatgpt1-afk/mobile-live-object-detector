@@ -111,6 +111,35 @@ document.querySelector('#cancelProductCrop').addEventListener('click',closeCrop)
 document.querySelector('#applyProductCrop').addEventListener('click',async()=>{if(!cropRect||cropRect.w<5||cropRect.h<5)return;const c=document.createElement('canvas');c.width=Math.round(cropRect.w);c.height=Math.round(cropRect.h);c.getContext('2d').drawImage(productPhotoCanvas,cropRect.x,cropRect.y,cropRect.w,cropRect.h,0,0,c.width,c.height);await updateProductPhotoFromCanvas(c);closeCrop();});
 productPhotoInput.addEventListener('change',setProductPhoto);
 productPhotoCamera.addEventListener('change',setProductPhoto);
+// Lightweight local background removal: estimate the backdrop from the image border.
+// Works best for a plain, contrasting backdrop; does not use external services.
+document.querySelector('#removeProductBackground').addEventListener('click',async()=>{
+ if(!productPhotoBlob)return;
+ const button=document.querySelector('#removeProductBackground');button.disabled=true;
+ try{
+  const bitmap=await createImageBitmap(productPhotoBlob);
+  const canvas=document.createElement('canvas');canvas.width=bitmap.width;canvas.height=bitmap.height;
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(bitmap,0,0);bitmap.close?.();
+  const {width:w,height:h}=canvas,image=ctx.getImageData(0,0,w,h),d=image.data;
+  const corners=[[0,0],[w-1,0],[0,h-1],[w-1,h-1]];
+  const bg=[0,1,2].map(k=>corners.reduce((sum,[x,y])=>sum+d[(y*w+x)*4+k],0)/4);
+  const diff=(i)=>Math.hypot(d[i]-bg[0],d[i+1]-bg[1],d[i+2]-bg[2]);
+  const visited=new Uint8Array(w*h),queue=new Int32Array(w*h);let head=0,tail=0;
+  const enqueue=(x,y)=>{if(x<0||x>=w||y<0||y>=h)return;const n=y*w+x;if(visited[n]||diff(n*4)>65)return;visited[n]=1;queue[tail++]=n;};
+  for(let x=0;x<w;x++){enqueue(x,0);enqueue(x,h-1);}
+  for(let y=0;y<h;y++){enqueue(0,y);enqueue(w-1,y);}
+  while(head<tail){const n=queue[head++],x=n%w,y=(n/w)|0;enqueue(x-1,y);enqueue(x+1,y);enqueue(x,y-1);enqueue(x,y+1);}
+  for(let n=0;n<visited.length;n++)if(visited[n])d[n*4+3]=0;
+  ctx.putImageData(image,0,0);
+  productPhotoBlob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+  if(!productPhotoBlob)throw Error('Unable to save photo');
+  if(productPhotoPreview.src.startsWith('blob:'))URL.revokeObjectURL(productPhotoPreview.src);
+  productPhotoPreview.src=URL.createObjectURL(productPhotoBlob);
+  barcodeMessage.textContent='Background removed. Check the edges before continuing; use Upload to replace if needed.';
+ }catch(error){barcodeMessage.textContent='Background removal failed: '+error.message;}
+ finally{button.disabled=false;}
+});
+
 const itemPlacement = document.querySelector('#itemPlacement');
 const shotView = document.querySelector('#shotView');
 const shotIndicator = document.querySelector('#shotIndicator');
@@ -145,6 +174,7 @@ function refreshDual(){
   [...shotView.options].forEach(o=>o.disabled=activeShot===0?o.value!=='front':o.value==='front');
   shotView.disabled=activeShot===0;
   itemPlacement.disabled=!!dualShots[0] || !!dualShots[1];
+  document.querySelectorAll(".placement-example").forEach(el=>{el.disabled=itemPlacement.disabled;el.setAttribute("aria-pressed",String(el.dataset.placement===itemPlacement.value));});
   const d=dualDimensions();
   combinedDimensions.textContent=`Length ${d.length?.toFixed(2)??'—'} · Width ${d.width?.toFixed(2)??'—'} · Height ${d.height?.toFixed(2)??'—'} cm`;
   saveDualItem.disabled=dualRecordSaved || dualRecordSaving || !dualShots[0] || (!dualShots[1] && shotView.value!=='blank');
@@ -308,7 +338,8 @@ function resetDual(){
   dualShots=[null,null];activeShot=0;dualPlacement=itemPlacement.value;dualRecordSaved=false;dualRecordSaving=false;
   shotView.value='front';refreshDual();
 }
-function updatePlacementExamples(){document.querySelectorAll('.placement-example').forEach(el=>el.classList.toggle('selected',el.dataset.placement===itemPlacement.value));}
+function updatePlacementExamples(){document.querySelectorAll('.placement-example').forEach(el=>{const selected=el.dataset.placement===itemPlacement.value;el.classList.toggle('selected',selected);el.setAttribute('aria-pressed',String(selected));});}
+document.querySelectorAll('.placement-example').forEach(el=>el.addEventListener('click',()=>{if(itemPlacement.disabled)return;itemPlacement.value=el.dataset.placement;itemPlacement.dispatchEvent(new Event('change'));}));
 itemPlacement.addEventListener('change',()=>{dualPlacement=itemPlacement.value;refreshDual();updatePlacementExamples();});
 updatePlacementExamples();
 shotView.addEventListener('change',()=>{if(activeShot===1&&dualShots[1]){dualShots[1].view=shotView.value;}refreshDual();});
@@ -559,7 +590,7 @@ video.addEventListener('pointerdown', async event => {
   const track = stream.getVideoTracks()[0];
   try {
     const caps = track.getCapabilities?.() || {};
-    if (caps.focusMode?.includes('single-shot')) await track.applyConstraints({advanced:[{focusMode:'single-shot'}]});
+    if (caps.focusMode?.includes('single-shot')) await track.applyConstraints({advanced:[{focusMode:'single-shot',pointsOfInterest:[{x:(event.clientX-rect.left)/rect.width,y:(event.clientY-rect.top)/rect.height}]}]});
     else if (caps.focusMode?.includes('continuous')) await track.applyConstraints({advanced:[{focusMode:'continuous'}]});
   } catch (error) { /* Browser may not support focus controls; auto-focus remains active. */ }
   setTimeout(() => { tapFocusIndicator.hidden = true; }, 900);

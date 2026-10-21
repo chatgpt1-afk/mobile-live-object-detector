@@ -1,1 +1,1 @@
-v0.14.8: Result photo now has an interactive green item frame. Drag corners to resize or drag inside to move. Dimension inputs and frame are bidirectionally linked. Blue reference frame remains fixed.
+v0.14.9: Tap placement illustrations; compact item-photo action icons; local plain-background removal; improved camera tap focus where supported.\n
