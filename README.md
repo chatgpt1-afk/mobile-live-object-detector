@@ -1,1 +1,1 @@
-v0.14.9: Tap placement illustrations; compact item-photo action icons; local plain-background removal; improved camera tap focus where supported.\n
+v0.15.0: Removed Item Photo background removal, labeled Upload Image, and made camera tap focus indicator reliable. Hardware point-focus depends on browser support.

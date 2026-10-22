@@ -111,35 +111,6 @@ document.querySelector('#cancelProductCrop').addEventListener('click',closeCrop)
 document.querySelector('#applyProductCrop').addEventListener('click',async()=>{if(!cropRect||cropRect.w<5||cropRect.h<5)return;const c=document.createElement('canvas');c.width=Math.round(cropRect.w);c.height=Math.round(cropRect.h);c.getContext('2d').drawImage(productPhotoCanvas,cropRect.x,cropRect.y,cropRect.w,cropRect.h,0,0,c.width,c.height);await updateProductPhotoFromCanvas(c);closeCrop();});
 productPhotoInput.addEventListener('change',setProductPhoto);
 productPhotoCamera.addEventListener('change',setProductPhoto);
-// Lightweight local background removal: estimate the backdrop from the image border.
-// Works best for a plain, contrasting backdrop; does not use external services.
-document.querySelector('#removeProductBackground').addEventListener('click',async()=>{
- if(!productPhotoBlob)return;
- const button=document.querySelector('#removeProductBackground');button.disabled=true;
- try{
-  const bitmap=await createImageBitmap(productPhotoBlob);
-  const canvas=document.createElement('canvas');canvas.width=bitmap.width;canvas.height=bitmap.height;
-  const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(bitmap,0,0);bitmap.close?.();
-  const {width:w,height:h}=canvas,image=ctx.getImageData(0,0,w,h),d=image.data;
-  const corners=[[0,0],[w-1,0],[0,h-1],[w-1,h-1]];
-  const bg=[0,1,2].map(k=>corners.reduce((sum,[x,y])=>sum+d[(y*w+x)*4+k],0)/4);
-  const diff=(i)=>Math.hypot(d[i]-bg[0],d[i+1]-bg[1],d[i+2]-bg[2]);
-  const visited=new Uint8Array(w*h),queue=new Int32Array(w*h);let head=0,tail=0;
-  const enqueue=(x,y)=>{if(x<0||x>=w||y<0||y>=h)return;const n=y*w+x;if(visited[n]||diff(n*4)>65)return;visited[n]=1;queue[tail++]=n;};
-  for(let x=0;x<w;x++){enqueue(x,0);enqueue(x,h-1);}
-  for(let y=0;y<h;y++){enqueue(0,y);enqueue(w-1,y);}
-  while(head<tail){const n=queue[head++],x=n%w,y=(n/w)|0;enqueue(x-1,y);enqueue(x+1,y);enqueue(x,y-1);enqueue(x,y+1);}
-  for(let n=0;n<visited.length;n++)if(visited[n])d[n*4+3]=0;
-  ctx.putImageData(image,0,0);
-  productPhotoBlob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
-  if(!productPhotoBlob)throw Error('Unable to save photo');
-  if(productPhotoPreview.src.startsWith('blob:'))URL.revokeObjectURL(productPhotoPreview.src);
-  productPhotoPreview.src=URL.createObjectURL(productPhotoBlob);
-  barcodeMessage.textContent='Background removed. Check the edges before continuing; use Upload to replace if needed.';
- }catch(error){barcodeMessage.textContent='Background removal failed: '+error.message;}
- finally{button.disabled=false;}
-});
-
 const itemPlacement = document.querySelector('#itemPlacement');
 const shotView = document.querySelector('#shotView');
 const shotIndicator = document.querySelector('#shotIndicator');
@@ -581,19 +552,33 @@ referenceSizeSelect.addEventListener('change', () => {
 placementHint.textContent = MARKER_ON_ITEM
   ? 'Version A: place marker flat on item top; marker may overlap item frame. Measure the same top plane.'
   : 'Version B: place marker beside the item, facing the camera, at the same depth as the measured face.';
-video.addEventListener('pointerdown', async event => {
-  if (!running || !stream) return;
+// Listen on the preview container: video overlays can otherwise swallow taps.
+const cameraViewer = document.querySelector('#viewer');
+let focusHideTimer;
+cameraViewer.addEventListener('pointerdown', async event => {
+  if (!running || !stream || event.target.closest('button')) return;
   const rect = video.getBoundingClientRect();
+  if (!rect.width || !rect.height || event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) return;
+  const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+  const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+  const viewerRect = cameraViewer.getBoundingClientRect();
+  tapFocusIndicator.style.left = `${event.clientX - viewerRect.left}px`;
+  tapFocusIndicator.style.top = `${event.clientY - viewerRect.top}px`;
   tapFocusIndicator.hidden = false;
-  tapFocusIndicator.style.left = `${event.clientX - rect.left + video.offsetLeft}px`;
-  tapFocusIndicator.style.top = `${event.clientY - rect.top + video.offsetTop}px`;
+  clearTimeout(focusHideTimer);
+  focusHideTimer = setTimeout(() => { tapFocusIndicator.hidden = true; }, 1200);
   const track = stream.getVideoTracks()[0];
+  if (!track?.applyConstraints) return;
   try {
     const caps = track.getCapabilities?.() || {};
-    if (caps.focusMode?.includes('single-shot')) await track.applyConstraints({advanced:[{focusMode:'single-shot',pointsOfInterest:[{x:(event.clientX-rect.left)/rect.width,y:(event.clientY-rect.top)/rect.height}]}]});
-    else if (caps.focusMode?.includes('continuous')) await track.applyConstraints({advanced:[{focusMode:'continuous'}]});
-  } catch (error) { /* Browser may not support focus controls; auto-focus remains active. */ }
-  setTimeout(() => { tapFocusIndicator.hidden = true; }, 900);
+    const modes = caps.focusMode || [];
+    const advanced = {};
+    if (modes.includes('single-shot')) advanced.focusMode = 'single-shot';
+    else if (modes.includes('continuous')) advanced.focusMode = 'continuous';
+    // Browsers may expose focus modes without position-of-interest support.
+    if (caps.pointsOfInterest) advanced.pointsOfInterest = [{x,y}];
+    if (Object.keys(advanced).length) await track.applyConstraints({advanced:[advanced]});
+  } catch (_) { /* Visual tap target still works; hardware focus is browser-dependent. */ }
 });
 
 const PROCESS_WIDTH = 320;

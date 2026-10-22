@@ -9,11 +9,11 @@
   <title>Live Object Frame</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=0.14.9">
+  <link rel="stylesheet" href="styles.css?v=0.15.0">
 </head>
 <body>
   <main id="homePage" class="home-page">
-    <p class="eyebrow">OBJECT MEASUREMENT · VERSION 0.14.9</p>
+    <p class="eyebrow">OBJECT MEASUREMENT · VERSION 0.15.0</p>
     <h1>Measure products with your phone</h1>
     <p>Frame one product with the printed reference marker, confirm the object frame, then save the measurement.</p>
     <button id="startMeasurementButton" class="primary" type="button">Start Measurement</button>
@@ -23,7 +23,7 @@
   <main id="measurementPage" class="app-shell" hidden>
     <header class="topbar">
       <div>
-        <p class="eyebrow">PHASE 2B · VERSION 0.14.9</p>
+        <p class="eyebrow">PHASE 2B · VERSION 0.15.0</p>
         <h1>Live Object Frame</h1>
       </div>
       <div class="header-actions">
@@ -152,7 +152,7 @@
         <span>Barcode</span>
         <input id="barcodeInput" type="text" autocomplete="off" enterkeyhint="done" placeholder="Key in product barcode" required>
       </label>
-      <div class="product-photo-input"><label>Item Photo (required)</label><div class="product-photo-actions"><button id="takeProductPhoto" type="button" aria-label="Capture Item Photo" title="Capture Item Photo">📷</button><button id="uploadProductPhoto" type="button" aria-label="Upload Item Photo" title="Upload Item Photo">⬆</button></div><input id="productPhotoInput" type="file" accept="image/*" hidden><input id="productPhotoCamera" type="file" accept="image/*" capture="environment" hidden><img id="productPhotoPreview" alt="Item photo preview" hidden><div id="photoEditControls" hidden><div class="photo-rotate-row"><button id="rotatePhotoLeft" type="button" aria-label="Rotate left" title="Rotate left">↶</button><span>Rotate</span><button id="rotatePhotoRight" type="button" aria-label="Rotate right" title="Rotate right">↷</button></div><div class="photo-edit-actions"><button id="cropProductPhoto" type="button" title="Crop Image" aria-label="Crop Image">✂</button><button id="removeProductBackground" type="button" title="Remove Background" aria-label="Remove Background">◩</button></div><div id="cropPhotoStage" hidden><canvas id="cropPhotoCanvas"></canvas><small>Drag the green frame to move it, or drag its handles to resize.</small></div><div id="cropPhotoActions" hidden><button id="applyProductCrop" type="button" hidden title="Apply Crop" aria-label="Apply Crop">✓</button><button id="cancelProductCrop" type="button" hidden title="Cancel Crop" aria-label="Cancel Crop">✕</button></div></div><small>Required before Continue. This photo will appear in Item Dimensions.</small></div><p id="barcodeMessage" class="dialog-message">Key in the barcode or scan it using the phone camera.</p>
+      <div class="product-photo-input"><label>Item Photo (required)</label><div class="product-photo-actions"><button id="takeProductPhoto" type="button" aria-label="Capture Item Photo" title="Capture Item Photo">📷</button><button id="uploadProductPhoto" type="button" aria-label="Upload Image" title="Upload Image">⬆ <span>Upload Image</span></button></div><input id="productPhotoInput" type="file" accept="image/*" hidden><input id="productPhotoCamera" type="file" accept="image/*" capture="environment" hidden><img id="productPhotoPreview" alt="Item photo preview" hidden><div id="photoEditControls" hidden><div class="photo-rotate-row"><button id="rotatePhotoLeft" type="button" aria-label="Rotate left" title="Rotate left">↶</button><span>Rotate</span><button id="rotatePhotoRight" type="button" aria-label="Rotate right" title="Rotate right">↷</button></div><div class="photo-edit-actions"><button id="cropProductPhoto" type="button" title="Crop Image" aria-label="Crop Image">✂</button></div><div id="cropPhotoStage" hidden><canvas id="cropPhotoCanvas"></canvas><small>Drag the green frame to move it, or drag its handles to resize.</small></div><div id="cropPhotoActions" hidden><button id="applyProductCrop" type="button" hidden title="Apply Crop" aria-label="Apply Crop">✓</button><button id="cancelProductCrop" type="button" hidden title="Cancel Crop" aria-label="Cancel Crop">✕</button></div></div><small>Required before Continue. This photo will appear in Item Dimensions.</small></div><p id="barcodeMessage" class="dialog-message">Key in the barcode or scan it using the phone camera.</p>
       <video id="barcodeVideo" class="barcode-video" autoplay muted playsinline hidden></video>
       <div class="dialog-actions">
         <button id="scanBarcodeButton" type="button">Scan Barcode</button>
@@ -204,6 +204,6 @@
   </dialog>
 
   <canvas id="processingCanvas" hidden></canvas>
-  <script src="app.js?v=0.14.9" defer></script>
+  <script src="app.js?v=0.15.0" defer></script>
 </body>
 </html>
